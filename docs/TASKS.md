@@ -8,11 +8,27 @@
 Este documento decompõe o desenvolvimento do Backend em fases e tarefas atômicas sequenciais. Cada tarefa possui escopo estrito de arquivos a serem criados ou alterados, pré-condições bem definidas e procedimentos claros de validação e testes.
 
 > [!IMPORTANT]
-> **Regra de Execução:** Nenhuma tarefa deve ser iniciada sem que sua predecessora esteja concluída, com testes verdes e aprovação formal. Conforme determinação arquitetural, o código de produção conecta-se unicamente ao **PostgreSQL 16 via Docker**, sem qualquer uso de SQLite.
+> **Regras de Execução Inegociáveis:**
+> 1. Nenhuma tarefa deve ser iniciada sem que sua predecessora esteja concluída, com testes verdes e aprovação formal.
+> 2. O código de produção conecta-se unicamente ao **PostgreSQL 16 via Docker**, sem qualquer uso de SQLite.
+> 3. **Cobertura de Testes Mandatória $\ge 80\%$:** Todas as tarefas devem atingir e manter no mínimo 80% de cobertura de código (`pytest-cov` com `--cov-fail-under=80`).
+> 4. Cada tarefa possui um documento de especificação detalhada individual (PRD) localizado em `docs/tasks/`.
 
 ---
 
-## 2. Visão Geral das Fases
+## 2. Mapa dos PRDs Detalhados por Tarefa
+
+| Tarefa | Nome | Documento PRD Detalhado | Meta de Cobertura |
+| :--- | :--- | :--- | :--- |
+| **Task 1** | Alinhamento e Refatoração da Base | [PRD_TASK_1_BASE_REFACTOR.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_1_BASE_REFACTOR.md) | $\ge 80\%$ |
+| **Task 2** | Módulo de Idempotência Robusta | [PRD_TASK_2_IDEMPOTENCY.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_2_IDEMPOTENCY.md) | $\ge 80\%$ |
+| **Task 3** | Módulo de Produtos & Categorias | [PRD_TASK_3_PRODUCTS_CATALOG.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_3_PRODUCTS_CATALOG.md) | $\ge 80\%$ |
+| **Task 4** | Módulo do Livro-Razão (Ledger) | [PRD_TASK_4_INVENTORY_LEDGER.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_4_INVENTORY_LEDGER.md) | $\ge 80\%$ |
+| **Task 5** | Suíte de Testes & Concorrência | [PRD_TASK_5_TEST_SUITE_CONCURRENCY.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_5_TEST_SUITE_CONCURRENCY.md) | $\ge 80\%$ |
+
+---
+
+## 3. Visão Geral das Fases
 
 ```mermaid
 flowchart TD
