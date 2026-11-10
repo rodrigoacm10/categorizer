@@ -172,6 +172,6 @@ def delete_product(db: Session, product_id: str, reason: Optional[str] = None, i
     db.commit()
     return {
         "message": f"Produto '{product.name}' removido com sucesso. Histórico de auditoria preservado.",
-        "product_id": product.id,
+        "product_id": str(product.id),
         "remaining_quantity_scaled": product.current_quantity
     }

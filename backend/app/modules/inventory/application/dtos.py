@@ -39,8 +39,8 @@ class StockMovementResponseDto(BaseModel):
         p_name = mov.product.name if mov.product else None
         p_unit = mov.product.unit if mov.product else None
         return cls(
-            id=mov.id,
-            product_id=mov.product_id,
+            id=str(mov.id),
+            product_id=str(mov.product_id),
             product_name=p_name,
             product_unit=p_unit,
             type=mov.type,

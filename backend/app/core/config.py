@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 
@@ -24,5 +25,17 @@ class Settings(BaseSettings):
     
     # Idempotency window in seconds for deduplication
     IDEMPOTENCY_EXPIRATION_HOURS: int = 24
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def validate_database_url(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("DATABASE_URL não pode ser vazia.")
+        valid_schemes = ("postgresql://", "postgresql+psycopg2://", "postgres://")
+        if not any(v.startswith(scheme) for scheme in valid_schemes):
+            raise ValueError(
+                f"DATABASE_URL inválida. Deve iniciar com um dos esquemas suportados do PostgreSQL: {valid_schemes}"
+            )
+        return v
 
 settings = Settings()

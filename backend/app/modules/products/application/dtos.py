@@ -18,6 +18,11 @@ class CategoryResponseDto(CategoryBaseDto):
     id: str
     created_at: datetime
 
+    @field_validator("id", mode="before")
+    @classmethod
+    def coerce_uuid_to_str(cls, v):
+        return str(v) if v is not None else v
+
 class ProductCreateDto(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = None
@@ -63,7 +68,7 @@ class ProductResponseDto(BaseModel):
             is_low = True
 
         return cls(
-            id=product.id,
+            id=str(product.id),
             name=product.name,
             description=product.description,
             unit=product.unit,
