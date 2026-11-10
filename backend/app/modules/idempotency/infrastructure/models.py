@@ -14,5 +14,7 @@ class IdempotencyRecord(Base):
     status = Column(String(32), nullable=False, default="PROCESSING")
     response_code = Column(Integer, nullable=True)
     response_body = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=utc_now, nullable=False)
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+IdempotencyRecordModel = IdempotencyRecord
