@@ -3,11 +3,11 @@
 ---
 
 ## 1. Identificação da Tarefa
-- **Identificador:** `TASK-05`
-- **Nome:** Suíte de Testes de Concorrência, Auditoria e Validação de Cobertura
-- **Escopo:** Fixtures com PostgreSQL Real, Testes de Race Conditions com Threads, Fluxo Ponta a Ponta e Homologação de Cobertura
+- **Identificador:** `TASK-06` (anteriormente `TASK-05`)
+- **Nome:** Suíte de Testes de Concorrência, Auditoria, Isolamento Multi-Tenant e Validação de Cobertura
+- **Escopo:** Fixtures com PostgreSQL Real, Testes de Race Conditions com Threads, Prova de Zero Data Leakage entre Tenants, Fluxo Ponta a Ponta e Homologação de Cobertura
 - **Responsável:** `code_implementer` (supervisionado por `orchestrator`)
-- **Status:** Planejada / Depende das Tasks 1, 2, 3 e 4
+- **Status:** Planejada / Depende das Tasks 1 a 5
 - **Requisito Mandatório de Qualidade:** **Cobertura global de código do backend $\ge 80\%$** aferida via `pytest-cov` com flag de bloqueio `--cov-fail-under=80`.
 
 ---
@@ -68,6 +68,14 @@ Esta tarefa estrutura a esteira completa de testes automatizados executados dire
   - Validar recebimento de `X-Cache: HIT`.
   - Validar que nenhuma linha duplicada foi criada em `stock_movements`.
 
+### 3.5. RF-05: Testes de Isolamento Multi-Tenant Estrito (Zero Data Leakage)
+- Em `backend/tests/test_tenant_isolation.py`:
+  - Criar dois tenants distintos (`Tenant Alpha` e `Tenant Beta`) com seus respectivos usuários e tokens JWT.
+  - Cadastrar produtos e categorias específicos em cada tenant.
+  - Executar consultas e listagens no Tenant Alpha e validar que 0% dos dados do Tenant Beta são retornados ou visíveis.
+  - Tentar movimentar estoque de produto do Tenant Beta informando `X-Tenant-ID` do Tenant Alpha -> Rejeitar com `HTTP 404 Not Found` ou `403 Forbidden`.
+  - Validar que chaves de idempotência iguais entre Tenant Alpha e Beta não colidem.
+
 ---
 
 ## 4. Requisito de Cobertura de Testes ($\ge 80\%$)
@@ -77,6 +85,8 @@ Esta tarefa estrutura a esteira completa de testes automatizados executados dire
 - Módulos avaliados:
   - `app/core/` $\ge 80\%$
   - `app/shared/` $\ge 80\%$
+  - `app/modules/auth/` $\ge 80\%$
+  - `app/modules/tenants/` $\ge 80\%$
   - `app/modules/idempotency/` $\ge 80\%$
   - `app/modules/products/` $\ge 80\%$
   - `app/modules/inventory/` $\ge 80\%$
@@ -93,6 +103,7 @@ pytest --cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=80
 
 - [ ] Suíte de testes completa executando 100% verde contra o PostgreSQL.
 - [ ] Teste concorrente de 10 threads comprova ausência de race conditions e bloqueia saldo negativo.
+- [ ] Prova automatizada de isolamento multi-tenant (zero vazamento de dados entre tenants distintos).
 - [ ] Conciliação matemática do Ledger aprovada em asserções automatizadas.
 - [ ] Relatório do `pytest-cov` registrando cobertura global **$\ge 80\%$**.
 - [ ] Zero dependência de arquivos SQLite temporários.

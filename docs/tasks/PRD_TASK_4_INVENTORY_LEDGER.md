@@ -3,11 +3,11 @@
 ---
 
 ## 1. Identificação da Tarefa
-- **Identificador:** `TASK-04`
-- **Nome:** Módulo do Livro-Razão Imutável e Bloqueio Concorrente Pessimista
-- **Escopo:** Livro-Razão (`stock_movements`), Transações ACID, Unit of Work, `SELECT ... FOR UPDATE`, Prevenção de Saldo Negativo e Extrato Histórico
+- **Identificador:** `TASK-05` (anteriormente `TASK-04`)
+- **Nome:** Módulo do Livro-Razão Imutável e Bloqueio Concorrente Pessimista Multi-Tenant
+- **Escopo:** Livro-Razão (`stock_movements`) com `tenant_id`, Transações ACID, Unit of Work escopado por tenant, `SELECT ... FOR UPDATE`, Prevenção de Saldo Negativo e Extrato Histórico
 - **Responsável:** `code_implementer` (supervisionado por `orchestrator`)
-- **Status:** Planejada / Depende das Tasks 1, 2 e 3
+- **Status:** Planejada / Depende das Tasks 1, 2, 3 e 4
 - **Requisito Mandatório de Qualidade:** **Cobertura de testes unitários e de integração $\ge 80\%$** aferida via `pytest-cov`.
 
 ---
@@ -43,7 +43,7 @@ A solução contábil deste sistema fundamenta-se no padrão **Livro-Razão Imut
   - `InsufficientStockError(product_id: UUID, current: int, requested: int)`: Mapeado para `HTTP 422 Unprocessable Entity` (RFC 7807).
   - `InvalidMovementError(detail: str)`: Mapeado para `HTTP 400 Bad Request`.
 - Em `app/modules/inventory/domain/entities.py`:
-  - Entidade pura `StockMovement` contendo `id`, `product_id`, `type`, `quantity` (delta em escala $10^3$), `balance_after`, `reason`, `idempotency_key`, `created_at`.
+  - Entidade pura `StockMovement` contendo `id`, `tenant_id`, `product_id`, `type`, `quantity` (delta em escala $10^3$), `balance_after`, `reason`, `idempotency_key`, `created_at`.
 
 ### 3.2. RF-02: Modelo de Persistência no PostgreSQL
 - Em `app/modules/inventory/infrastructure/models.py`:
@@ -52,6 +52,7 @@ A solução contábil deste sistema fundamenta-se no padrão **Livro-Razão Imut
       __tablename__ = "stock_movements"
 
       id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+      tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False, index=True)
       product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"), nullable=False, index=True)
       type = Column(String(32), nullable=False)
       quantity = Column(BigInteger, nullable=False)          # Delta (+ ou -) em escala x1000

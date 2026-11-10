@@ -1,5 +1,5 @@
 # Plano Detalhado de Implementação do Backend (TASKS)
-## Decomposição de Tarefas Técnicas, Pré-condições e Critérios de Aceitação
+## Decomposição de Tarefas Técnicas, Sequenciamento, Multi-Tenancy e Critérios de Aceitação
 
 ---
 
@@ -9,309 +9,237 @@ Este documento decompõe o desenvolvimento do Backend em fases e tarefas atômic
 
 > [!IMPORTANT]
 > **Regras de Execução Inegociáveis:**
-> 1. Nenhuma tarefa deve ser iniciada sem que sua predecessora esteja concluída, com testes verdes e aprovação formal.
+> 1. Nenhuma tarefa deve ser iniciada sem que sua predecessora esteja formalmente concluída, com testes verdes e pull request mesclado na branch `dev`.
 > 2. O código de produção conecta-se unicamente ao **PostgreSQL 16 via Docker**, sem qualquer uso de SQLite.
 > 3. **Cobertura de Testes Mandatória $\ge 80\%$:** Todas as tarefas devem atingir e manter no mínimo 80% de cobertura de código (`pytest-cov` com `--cov-fail-under=80`).
 > 4. Cada tarefa possui um documento de especificação detalhada individual (PRD) localizado em `docs/tasks/`.
+> 5. **Isolamento Multi-Tenant em Primeiro Lugar:** Com a aprovação dos requisitos de Autenticação e Multi-Tenancy, todas as capacidades de catálogo, estoque e idempotência são desenvolvidas nativamente sobre o contexto de `tenant_id`.
 
 ---
 
 ## 2. Mapa dos PRDs Detalhados por Tarefa
 
-| Tarefa | Nome | Documento PRD Detalhado | Meta de Cobertura |
-| :--- | :--- | :--- | :--- |
-| **Task 1** | Alinhamento e Refatoração da Base | [PRD_TASK_1_BASE_REFACTOR.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_1_BASE_REFACTOR.md) | $\ge 80\%$ |
-| **Task 2** | Módulo de Idempotência Robusta | [PRD_TASK_2_IDEMPOTENCY.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_2_IDEMPOTENCY.md) | $\ge 80\%$ |
-| **Task 3** | Módulo de Produtos & Categorias | [PRD_TASK_3_PRODUCTS_CATALOG.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_3_PRODUCTS_CATALOG.md) | $\ge 80\%$ |
-| **Task 4** | Módulo do Livro-Razão (Ledger) | [PRD_TASK_4_INVENTORY_LEDGER.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_4_INVENTORY_LEDGER.md) | $\ge 80\%$ |
-| **Task 5** | Suíte de Testes & Concorrência | [PRD_TASK_5_TEST_SUITE_CONCURRENCY.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_5_TEST_SUITE_CONCURRENCY.md) | $\ge 80\%$ |
+| Tarefa | Nome | Status | Documento PRD Detalhado | Meta de Cobertura |
+| :--- | :--- | :---: | :--- | :---: |
+| **Task 1** | Alinhamento e Refatoração da Base | **CONCLUÍDA** | [PRD_TASK_1_BASE_REFACTOR.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_1_BASE_REFACTOR.md) | $\ge 80\%$ |
+| **Task 2** | Autenticação, Multi-Tenancy & RBAC | **EM PLANEJAMENTO** | [PRD_TASK_AUTH_TENANCY.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_AUTH_TENANCY.md) | $\ge 80\%$ |
+| **Task 3** | Módulo de Idempotência Robusta | Planejada | [PRD_TASK_2_IDEMPOTENCY.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_2_IDEMPOTENCY.md) | $\ge 80\%$ |
+| **Task 4** | Módulo de Produtos & Categorias | Planejada | [PRD_TASK_3_PRODUCTS_CATALOG.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_3_PRODUCTS_CATALOG.md) | $\ge 80\%$ |
+| **Task 5** | Módulo do Livro-Razão (Ledger) | Planejada | [PRD_TASK_4_INVENTORY_LEDGER.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_4_INVENTORY_LEDGER.md) | $\ge 80\%$ |
+| **Task 6** | Suíte de Testes, Concorrência & Isolamento | Planejada | [PRD_TASK_5_TEST_SUITE_CONCURRENCY.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_5_TEST_SUITE_CONCURRENCY.md) | $\ge 80\%$ |
 
 ---
 
-## 3. Visão Geral das Fases
+## 3. Visão Geral das Fases e Sequenciamento
 
 ```mermaid
 flowchart TD
-    T1["Task 1: Alinhamento e Refatoração da Base<br/>(PostgreSQL nativo, Alembic, limpeza de SQLite)"]
-    T2["Task 2: Módulo de Idempotência Robusta<br/>(RFC 9474, Hasher SHA-256, Cache & Guards)"]
-    T3["Task 3: Módulo de Produtos & Categorias<br/>(Clean Arch, N:N, Escala x1000, Soft-Delete)"]
-    T4["Task 4: Módulo do Livro-Razão (Ledger)<br/>(Append-Only, Locks Pessimistas FOR UPDATE, Saldo >= 0)"]
-    T5["Task 5: Suíte de Testes e Validação Concorrente<br/>(PostgreSQL real, Testes de Carga & Race Conditions)"]
+    T1["Task 1: Alinhamento e Refatoração da Base<br/>(PostgreSQL nativo, Alembic, limpeza de SQLite)<br/><b>[STATUS: CONCLUÍDA]</b>"]
+    T2["Task 2: Autenticação, Multi-Tenancy & RBAC<br/>(Users, Tenants, Memberships, JWT, X-Tenant-ID, Migração Alembic 0002)<br/><b>[STATUS: PRÓXIMA DA FILA]</b>"]
+    T3["Task 3: Módulo de Idempotência Robusta por Tenant<br/>(RFC 9474, Hasher SHA-256 com tenant_id, Replay de Cache)"]
+    T4["Task 4: Módulo de Produtos & Categorias Multi-Tenant<br/>(Catálogo isolado por tenant, N:N, Escala x1000, Soft-Delete)"]
+    T5["Task 5: Módulo do Livro-Razão (Ledger Multi-Tenant)<br/>(Append-Only, Lock Pessimista por Tenant/Produto, Saldo >= 0)"]
+    T6["Task 6: Suíte de Testes, Validação Concorrente & Isolamento<br/>(Testes de Concorrência, Prova de Zero Data Leakage entre Tenants)"]
 
     T1 --> T2
     T2 --> T3
     T3 --> T4
     T4 --> T5
+    T5 --> T6
 ```
 
 ---
 
 ## Task 1: Alinhamento e Refatoração da Base (PostgreSQL + Alembic)
+> **Status:** **CONCLUÍDA (PR #1 Mesclado)**
+> **PRD de Referência:** [PRD_TASK_1_BASE_REFACTOR.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_1_BASE_REFACTOR.md)
 
-### 1.1. Contexto e Objetivo
-Eliminar qualquer menção ou dependência de SQLite do código de produção e de configurações do backend. Padronizar a conexão exclusivamente para o PostgreSQL 16 configurado via Docker Compose, estruturar o versionamento do banco de dados utilizando **Alembic** e adequar os modelos SQLAlchemy aos tipos nativos estritos do PostgreSQL (`UUID`, `BigInteger`, `TIMESTAMP WITH TIME ZONE`).
+- [x] Purga completa de referências e arquivos SQLite no código de produção.
+- [x] Configuração de pool de conexões otimizado para PostgreSQL 16.
+- [x] Refatoração de modelos ORM para tipos nativos (`UUID`, `BigInteger`, `DateTime(timezone=True)`).
+- [x] Inicialização do Alembic e criação da migração `0001_initial_schema.py`.
+- [x] Implementação de testes automatizados com cobertura $\ge 80\%$.
 
-### 1.2. Subtarefas Detalhadas
+---
 
-- [ ] **Subtarefa 1.1: Adição de Dependências de Migração**
+## Task 2: Módulo de Autenticação, Multi-Tenancy e Isolamento Estrito (Auth & Tenancy)
+> **Status:** **EM PLANEJAMENTO / PRÓXIMA DA FILA**
+> **PRD de Referência:** [PRD_TASK_AUTH_TENANCY.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_AUTH_TENANCY.md)
+
+### 2.1. Contexto e Objetivo
+Implementar a infraestrutura de autenticação corporativa baseada em JWT OAuth2 Password Bearer, modelagem multi-tenant com relação N:N entre usuários e tenants (`tenant_memberships`), suporte a RBAC granular (`OWNER`, `GESTOR`, `ALMOXARIFE`, `AUDITOR`), atribuição automática de titularidade na criação de tenant e middleware/dependency de contexto (`X-Tenant-ID`), garantindo isolamento absoluto de dados.
+
+### 2.2. Subtarefas Detalhadas
+
+- [ ] **Subtarefa 2.1: Dependências de Segurança e Criptografia**
   - **Arquivos:** `backend/requirements.txt`
-  - **Ação:** Incluir a dependência `alembic>=1.13.0` no arquivo de dependências do backend.
-  - **Validação:** Instalar no ambiente virtual (`pip install -r backend/requirements.txt`) e verificar a disponibilidade do comando `alembic --version`.
+  - **Ação:** Incluir bibliotecas `passlib[bcrypt]>=1.7.4`, `python-jose[cryptography]>=3.3.0` e `pydantic[email]>=2.0.0`. Instalar e validar imports no ambiente virtual.
 
-- [ ] **Subtarefa 1.2: Purga Completa de SQLite no Código de Produção**
+- [ ] **Subtarefa 2.2: Utilitários Criptográficos e Emissão de Tokens**
   - **Arquivos:**
-    - `backend/app/shared/infrastructure/database.py`
     - `backend/app/core/config.py`
-    - `.env.example`
+    - `backend/app/core/security.py`
   - **Ação:**
-    - Remover todas as verificações condicionais `is_sqlite`, eventos de PRAGMA de SQLite (`PRAGMA journal_mode=WAL`), parâmetros `check_same_thread`.
-    - Configurar a engine SQLAlchemy exclusivamente com `pool_pre_ping=True`, `pool_size=10`, `max_overflow=20` voltados para PostgreSQL.
-    - Assegurar que `settings.DATABASE_URL` aponte exclusivamente para PostgreSQL:
-      `postgresql+psycopg2://postgres:postgres@localhost:5432/estoque_db`.
+    - Configurar variáveis `SECRET_KEY`, `ALGORITHM` (HS256) e `ACCESS_TOKEN_EXPIRE_MINUTES` em `Settings`.
+    - Implementar funções em `security.py`: `get_password_hash(password: str) -> str`, `verify_password(plain: str, hashed: str) -> bool` e `create_access_token(data: dict, expires_delta: Optional[timedelta]) -> str`.
 
-- [ ] **Subtarefa 1.3: Refatoração dos Modelos SQLAlchemy para Tipos Nativos PostgreSQL**
+- [ ] **Subtarefa 2.3: Modelos ORM de Auth e Tenancy**
   - **Arquivos:**
+    - `backend/app/modules/auth/infrastructure/models.py`
+    - `backend/app/modules/tenants/infrastructure/models.py`
     - `backend/app/modules/products/infrastructure/models.py`
     - `backend/app/modules/inventory/infrastructure/models.py`
     - `backend/app/modules/idempotency/infrastructure/models.py`
   - **Ação:**
-    - Substituir `Column(String(36))` por `Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)` utilizando `from sqlalchemy.dialects.postgresql import UUID`.
-    - Substituir `Column(DateTime)` por `Column(DateTime(timezone=True), nullable=False, default=utc_now)`.
-    - Assegurar que todas as colunas de quantidade usem `BigInteger` (`nullable=False`).
-    - Configurar chave estrangeira de `stock_movements.product_id` com `ForeignKey("products.id", ondelete="RESTRICT")` para impedir fisicamente exclusões em cascata.
-    - Remover `cascade="all, delete-orphan"` da relação `Product.movements` (o Ledger é estritamente independente e nunca sofre exclusão de registros).
+    - Criar `UserModel` (`id`, `email`, `password_hash`, `full_name`, `is_active`, timestamps).
+    - Criar `TenantModel` (`id`, `name`, `slug`, `description`, `is_active`, timestamps).
+    - Criar `TenantMembershipModel` (`user_id`, `tenant_id`, `role`, timestamps) com PK composta.
+    - Adicionar coluna `tenant_id` (`UUID`, FK `tenants.id`, `nullable=False`) em `categories`, `products`, `stock_movements` e `idempotency_records`.
+    - Atualizar `categories` com `UniqueConstraint("tenant_id", "name")`.
 
-- [ ] **Subtarefa 1.4: Desacoplamento da Criação de Tabelas no Runtime**
-  - **Arquivos:** `backend/app/main.py`
-  - **Ação:**
-    - Remover `Base.metadata.create_all(bind=engine)` do `backend/app/main.py`. A responsabilidade de estruturar o banco cabe exclusivamente ao Alembic.
-    - Migrar rotina inicial de seed de categorias para um script ou comando de seed independente acionável sob demanda.
-
-- [ ] **Subtarefa 1.5: Configuração e Inicialização do Alembic**
+- [ ] **Subtarefa 2.4: Migração Alembic `0002_add_auth_and_multi_tenancy`**
   - **Arquivos:**
-    - `backend/alembic.ini`
     - `backend/alembic/env.py`
-    - `backend/alembic/script.py.mako`
+    - `backend/alembic/versions/*_add_auth_and_multi_tenancy.py`
   - **Ação:**
-    - Inicializar estrutura Alembic em `backend/alembic/`.
-    - Em `backend/alembic/env.py`:
-      - Importar `app.core.config.settings` e atribuir `config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)`.
-      - Importar `Base.metadata` e registrar explicitamente todos os modelos (`Product`, `Category`, `product_categories`, `StockMovement`, `IdempotencyRecord`) em `target_metadata`.
+    - Registrar novos modelos em `target_metadata` no `env.py`.
+    - Gerar e validar migração que cria as novas tabelas e adiciona as FKs de `tenant_id` com dados default retroativos para desenvolvimento.
+    - Validar execução de `upgrade head` e `downgrade -1`.
 
-- [ ] **Subtarefa 1.6: Geração da Migração Inicial e Teste de Aplicação**
-  - **Arquivos:** `backend/alembic/versions/*_initial_schema.py`
-  - **Ação:**
-    - Subir o banco PostgreSQL via `docker-compose up -d postgres`.
-    - Executar `alembic revision --autogenerate -m "0001_initial_schema"`.
-    - Inspecionar a migração gerada, validando a integridade das tabelas (`categories`, `products`, `product_categories`, `stock_movements`, `idempotency_records`).
-    - Executar `alembic upgrade head` contra o PostgreSQL e conferir as tabelas criadas via `psql`.
-
-### 1.3. Critérios de Aceitação da Task 1
-1. Nenhuma linha de código sob `backend/app/` faz referência a `sqlite`, `test_estoque.db` ou `check_same_thread`.
-2. O container PostgreSQL 16 sobe via Docker Compose e aceita conexões na porta 5432.
-3. `alembic upgrade head` executa sem erros gerando o schema correto no PostgreSQL.
-4. `alembic downgrade base` e subsequente `alembic upgrade head` executam com sucesso atestando a reversibilidade da migração.
-
----
-
-## Task 2: Módulo de Idempotência e Tolerância a Falhas (RFC 9474)
-
-### 2.1. Contexto e Objetivo
-Implementar a infraestrutura de controle de idempotência gerenciada 100% pelo backend, blindando a aplicação contra envios concorrentes e retransmissões de rede decorrentes de duplo clique ou perda de conectividade.
-
-### 2.2. Subtarefas Detalhadas
-
-- [ ] **Subtarefa 2.1: Domain e Value Objects de Idempotência**
+- [ ] **Subtarefa 2.5: DTOs e Casos de Uso de Autenticação**
   - **Arquivos:**
-    - `backend/app/modules/idempotency/domain/entities.py`
-    - `backend/app/modules/idempotency/domain/enums.py`
-    - `backend/app/modules/idempotency/domain/repositories.py`
+    - `backend/app/modules/auth/application/dtos.py`
+    - `backend/app/modules/auth/application/use_cases.py`
+    - `backend/app/modules/auth/infrastructure/repositories.py`
   - **Ação:**
-    - Definir `IdempotencyStatus` (`PROCESSING`, `COMPLETED`, `FAILED`).
-    - Definir interface `IIdempotencyRepository` com métodos: `get_by_key(key)`, `save(record)`, `update_status(key, status, response_code, response_body)`.
+    - Implementar `RegisterUserUseCase`: normaliza email, criptografa senha e persiste usuário.
+    - Implementar `AuthenticateUserUseCase`: valida senha com `verify_password` e emite JWT.
+    - Implementar `GetUserProfileUseCase`: retorna perfil com a lista de tenants e papéis do usuário.
 
-- [ ] **Subtarefa 2.2: Repositório SQLAlchemy e Persistência**
-  - **Arquivos:** `backend/app/modules/idempotency/infrastructure/repositories.py`
+- [ ] **Subtarefa 2.6: DTOs e Casos de Uso de Tenants & Membros**
+  - **Arquivos:**
+    - `backend/app/modules/tenants/application/dtos.py`
+    - `backend/app/modules/tenants/application/use_cases.py`
+    - `backend/app/modules/tenants/infrastructure/repositories.py`
   - **Ação:**
-    - Implementar `SQLAlchemyIdempotencyRepository` operando sobre a sessão SQLAlchemy com suporte a flush atômico.
+    - Implementar `CreateTenantUseCase`: persiste o tenant e insere o usuário criador como `role='OWNER'` na mesma transação atômica.
+    - Implementar `ListUserTenantsUseCase`: lista tenants aos quais o usuário logado pertence.
+    - Implementar `AddTenantMemberUseCase`: valida permissão de `OWNER`/`GESTOR`, busca usuário pelo email e cria membership.
+    - Implementar `ListTenantMembersUseCase`.
 
-- [ ] **Subtarefa 2.3: Hasher Semântico da Intenção (SHA-256)**
-  - **Arquivos:** `backend/app/modules/idempotency/interfaces/hasher.py`
+- [ ] **Subtarefa 2.7: Injeção de Contexto de Tenant e RBAC**
+  - **Arquivos:**
+    - `backend/app/modules/auth/interfaces/dependencies.py`
+    - `backend/app/modules/tenants/interfaces/context.py`
+    - `backend/app/modules/tenants/interfaces/rbac.py`
   - **Ação:**
-    - Criar função utilitária para normalizar payloads JSON (ordenação alfabética de chaves, remoção de espaços em branco).
-    - Gerar hash SHA-256 combinando: `HTTP_METHOD + "|" + PATH + "|" + CANONICAL_JSON`.
+    - Criar dependência `get_current_user`: extrai token Bearer, valida assinatura e busca usuário ativo.
+    - Criar dependência `get_tenant_context`: extrai header `X-Tenant-ID`, valida existência do tenant e verifica se o usuário logado é membro ativo. Rejeita com `HTTP 403 Forbidden` (`tenant-access-denied`) em caso negativo.
+    - Criar decorador/dependência `require_roles(*roles: TenantRole)` para assegurar conformidade com a matriz de permissões.
 
-- [ ] **Subtarefa 2.4: Guard / Interceptor de Idempotência no FastAPI**
-  - **Arquivos:** `backend/app/modules/idempotency/interfaces/guard.py`
+- [ ] **Subtarefa 2.8: Routers FastAPI e Tratamento de Erros RFC 7807**
+  - **Arquivos:**
+    - `backend/app/modules/auth/interfaces/router.py`
+    - `backend/app/modules/tenants/interfaces/router.py`
+    - `backend/app/main.py`
   - **Ação:**
-    - Implementar dependência FastAPI injetável (`IdempotencyGuard`) que:
-      1. Lê o cabeçalho `X-Idempotency-Key`.
-      2. Se ausente, permite fluxo direto com verificação temporal contra duplo clique.
-      3. Se presente, busca a chave no banco:
-         - Se `COMPLETED` com mesmo hash: faz replay imediato da resposta armazenada (`HTTP 200/201`, adicionando header `X-Cache: HIT`).
-         - Se `COMPLETED` com hash diferente: levanta `HTTPException(409, detail="Idempotency key reused for different payload")`.
-         - Se `PROCESSING`: levanta `HTTPException(409, detail="A request with this idempotency key is currently being processed")`.
-      4. Se nova: registra como `PROCESSING` e prossegue com a execução.
-      5. Ao concluir o use case, atualiza o registro com `COMPLETED` e os dados da resposta.
+    - Mapear rotas `/api/auth/register`, `/api/auth/login`, `/api/auth/me`.
+    - Mapear rotas `/api/tenants`, `/api/tenants/{id}/members`.
+    - Configurar handlers globais para erros de autenticação e tenant no padrão RFC 7807.
 
-- [ ] **Subtarefa 2.5: Testes Unitários e de Integração de Idempotência**
-  - **Arquivos:** `backend/tests/test_idempotency.py`
+- [ ] **Subtarefa 2.9: Suíte de Testes de Autenticação e Multi-Tenancy**
+  - **Arquivos:**
+    - `backend/tests/test_auth.py`
+    - `backend/tests/test_tenants.py`
   - **Ação:**
-    - Testar replay idêntico com validação de `X-Cache: HIT`.
-    - Testar conflito de hash retornando HTTP 409.
-    - Testar concorrência simultânea da mesma chave gerando bloqueio.
+    - Testar registro com validação de hash e unicidade de email.
+    - Testar login com emissão de token JWT válido.
+    - Testar criação de tenant com vínculo automático de `OWNER`.
+    - Testar rejeição de acesso com `HTTP 403` quando um usuário tenta acessar recursos de outro tenant com header `X-Tenant-ID` não autorizado.
+    - Testar RBAC: validação de restrições por role.
 
 ### 2.3. Critérios de Aceitação da Task 2
-1. Retentativas idênticas com a mesma chave retornam o payload salvo e header `X-Cache: HIT` sem tocar na lógica de negócio nem alterar o estoque.
-2. Reenvios com parâmetros alterados usando chave pré-existente resultam em `HTTP 409 Conflict`.
-3. 100% dos testes de idempotência passam sem falhas contra o PostgreSQL.
+1. 100% das senhas armazenadas utilizam hash `bcrypt` salgado; nenhuma senha trafega ou reside em texto puro.
+2. Tokens JWT emitidos são validados com sucesso em rotas protegidas e rejeitados se expirados ou corrompidos (`401 Unauthorized`).
+3. Criação de tenant atribui o usuário logado como `OWNER` de forma transacionalmente indivisível.
+4. Tentativa de requisição com `X-Tenant-ID` de um tenant ao qual o usuário não pertence resulta em `HTTP 403 Forbidden` sob padrão RFC 7807.
+5. Cobertura de código da suíte de testes $\ge 80\%$ via `pytest-cov`.
 
 ---
 
-## Task 3: Módulo de Produtos e Categorias (Catálogo)
+## Task 3: Módulo de Idempotência Robusta por Tenant (RFC 9474 & SHA-256)
+> **Status:** **Planejada (Depende da Task 2)**
+> **PRD de Referência:** [PRD_TASK_2_IDEMPOTENCY.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_2_IDEMPOTENCY.md)
 
 ### 3.1. Contexto e Objetivo
-Implementar o catálogo de produtos e categorias sob Clean Architecture Modular, garantindo relacionamento N:N atômico, conversão estrita de quantidades com escala inteira fixa $10^3$ e soft-delete seguro vinculado a evento contábil.
+Implementar o controle de idempotência gerenciado 100% pelo backend, blindando a aplicação contra envios concorrentes e retransmissões de rede de duplo clique, com namespaces isolados por `tenant_id`.
 
 ### 3.2. Subtarefas Detalhadas
-
-- [ ] **Subtarefa 3.1: Entidades de Domínio e Contratos**
-  - **Arquivos:**
-    - `backend/app/modules/products/domain/entities.py`
-    - `backend/app/modules/products/domain/repositories.py`
-  - **Ação:**
-    - Definir entidades puras `Product` e `Category`.
-    - Definir interfaces `IProductRepository` e `ICategoryRepository`.
-
-- [ ] **Subtarefa 3.2: DTOs e Conversão de Escala Fixa ($10^3$)**
-  - **Arquivos:** `backend/app/modules/products/application/dtos.py`
-  - **Ação:**
-    - Criar schemas Pydantic v2:
-      - `ProductCreateDTO` (aceita `min_stock` como `float`, converte internamente para `int` escalado x1000).
-      - `ProductUpdateDTO`.
-      - `ProductResponseDTO` (expõe `current_quantity`, `current_quantity_raw`, `formatted_quantity`, `is_low_stock`).
-      - `CategoryCreateDTO`, `CategoryResponseDTO`.
-
-- [ ] **Subtarefa 3.3: Casos de Uso (Application Layer)**
-  - **Arquivos:** `backend/app/modules/products/application/use_cases.py`
-  - **Ação:**
-    - Implementar `CreateProductUseCase`: persiste o produto e associa a lista de categorias em transação atômica.
-    - Implementar `ListProductsUseCase`: suporta filtros por categoria, busca textual e filtro `low_stock_only`.
-    - Implementar `GetProductByIdUseCase`.
-    - Implementar `UpdateProductUseCase`: atualiza metadados cadastrais sem violar saldos físicos.
-    - Implementar `SoftDeleteProductUseCase`: marca `is_active = False`, preenche `deleted_at` e delega ao Unit of Work a criação do evento `PRODUCT_DELETED` no Ledger.
-    - Implementar `CategoryUseCases` (Listar, Criar, Deletar).
-
-- [ ] **Subtarefa 3.4: Repositórios Concretos SQLAlchemy**
-  - **Arquivos:** `backend/app/modules/products/infrastructure/repositories.py`
-  - **Ação:**
-    - Implementar consultas otimizadas utilizando `selectinload` ou `joinedload` para carregar categorias N:N sem problemas de N+1 queries.
-
-- [ ] **Subtarefa 3.5: Router e Endpoints FastAPI**
-  - **Arquivos:** `backend/app/modules/products/interfaces/router.py`
-  - **Ação:**
-    - Mapear rotas RESTful descritas na especificação (`POST /api/products`, `GET /api/products`, etc.) com injeção de dependências do FastAPI.
-
-### 3.3. Critérios de Aceitação da Task 3
-1. Cadastro de produto com múltiplas categorias persiste corretamente na tabela relacional associativa `product_categories`.
-2. Leitura de produto retorna `is_low_stock: true` sempre que `current_quantity <= min_stock`.
-3. Inativação do produto marca `is_active = false` e o oculta das listagens padrão, preservando seus registros no banco.
+- [ ] **Subtarefa 3.1: Entidades de Idempotência e Repositório Escopado**
+  - Repositório com métodos `get_by_key(tenant_id, key)`, `save(record)`, `mark_completed()`.
+- [ ] **Subtarefa 3.2: Hasher Semântico com Tenant Context**
+  - Digest SHA-256 gerado a partir de `tenant_id + "|" + METHOD + "|" + PATH + "|" + CANONICAL_PAYLOAD`.
+- [ ] **Subtarefa 3.3: FastAPI Guard / Interceptor de Idempotência**
+  - Injeção combinada com `TenantContext`. Replay de cache com `X-Cache: HIT`. Conflito 409 para payloads divergentes.
+- [ ] **Subtarefa 3.4: Testes de Idempotência com Escopo Multi-Tenant**
+  - Validar que dois tenants distintos podem usar a mesma chave sem colisão.
+  - Cobertura $\ge 80\%$.
 
 ---
 
-## Task 4: Módulo do Livro-Razão de Estoque (Append-Only Ledger & Concorrência)
+## Task 4: Módulo de Produtos e Categorias Multi-Tenant (Catálogo)
+> **Status:** **Planejada (Depende da Task 3)**
+> **PRD de Referência:** [PRD_TASK_3_PRODUCTS_CATALOG.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_3_PRODUCTS_CATALOG.md)
 
 ### 4.1. Contexto e Objetivo
-Implementar o Livro-Razão contábil perpétuo de movimentações (`stock_movements`), assegurando imutabilidade irrestrita (proibição de `UPDATE` e `DELETE`), serialização atômica de concorrência com locks pessimistas (`SELECT ... FOR UPDATE`) e prevenção estrita de saldo negativo.
+Implementar o catálogo de produtos e categorias sob Clean Architecture Modular, garantindo relacionamento N:N atômico, conversão estrita de quantidades na escala inteira fixa $10^3$, soft-delete contábil e **isolamento estrito por `tenant_id`**.
 
 ### 4.2. Subtarefas Detalhadas
-
-- [ ] **Subtarefa 4.1: Entidades de Domínio e Enums Contábeis**
-  - **Arquivos:**
-    - `backend/app/modules/inventory/domain/entities.py`
-    - `backend/app/modules/inventory/domain/enums.py`
-    - `backend/app/modules/inventory/domain/exceptions.py`
-  - **Ação:**
-    - Definir `MovementType` (`IN`, `OUT`, `ADJUSTMENT`, `PRODUCT_DELETED`).
-    - Definir exceção de domínio `InsufficientStockError` e `InvalidMovementError`.
-
-- [ ] **Subtarefa 4.2: Unit of Work com Lock Pessimista**
-  - **Arquivos:**
-    - `backend/app/modules/inventory/domain/repositories.py`
-    - `backend/app/modules/inventory/infrastructure/unit_of_work.py`
-    - `backend/app/modules/inventory/infrastructure/repositories.py`
-  - **Ação:**
-    - Implementar `InventoryUnitOfWork` gerenciando ciclo transacional com `__enter__` e `__exit__`.
-    - Implementar `get_product_for_update(product_id)` que executa a query com `.with_for_update()`, bloqueando a linha no PostgreSQL durante o cálculo e inserção do movimento.
-    - Implementar `StockMovementRepository` com apenas métodos de inserção (`append`) e leitura (`list_by_product`, `list_all`). Não implementar nenhum método de `update` ou `delete`.
-
-- [ ] **Subtarefa 4.3: Casos de Uso do Ledger**
-  - **Arquivos:** `backend/app/modules/inventory/application/use_cases.py`
-  - **Ação:**
-    - Implementar `RegisterStockInUseCase`:
-      - Trava o produto com `with_for_update()`.
-      - Incrementa saldo: $\text{balance\_after} = \text{current} + q$.
-      - Insere lançamento no Ledger (`type = IN`, `quantity = +q`, `balance_after`).
-      - Atualiza `Product.current_quantity = balance_after`.
-    - Implementar `RegisterStockOutUseCase`:
-      - Trava o produto com `with_for_update()`.
-      - Valida: se $\text{current} < q$, aborta com `InsufficientStockError`.
-      - Decrementa saldo: $\text{balance\_after} = \text{current} - q$.
-      - Insere lançamento no Ledger (`type = OUT`, `quantity = -q`, `balance_after`).
-      - Atualiza `Product.current_quantity = balance_after`.
-    - Implementar `RegisterStockAdjustmentUseCase`:
-      - Trava o produto.
-      - Calcula $\Delta = Q_{\text{novo}} - Q_{\text{atual}}$.
-      - Grava no Ledger (`type = ADJUSTMENT`, `quantity = Delta`, `balance_after = Q_novo`).
-      - Atualiza `Product.current_quantity = Q_novo`.
-    - Implementar `GetLedgerUseCase`:
-      - Retorna extrato histórico paginado com filtros de produto, período e tipo de evento.
-
-- [ ] **Subtarefa 4.4: Schemas DTO e Router FastAPI**
-  - **Arquivos:**
-    - `backend/app/modules/inventory/application/dtos.py`
-    - `backend/app/modules/inventory/interfaces/router.py`
-  - **Ação:**
-    - Criar DTOs com validação de quantidades positivas e conversão x1000.
-    - Prover endpoints: `POST /api/inventory/in`, `POST /api/inventory/out`, `POST /api/inventory/adjustment`, `GET /api/inventory/movements`.
-
-### 4.3. Critérios de Aceitação da Task 4
-1. Todas as movimentações geram linhas novas em `stock_movements`; nenhuma linha é alterada ou removida.
-2. Tentativa de saída maior do que o saldo físico retorna `HTTP 422 Unprocessable Entity` e preserva o saldo intacto.
-3. Ajuste de inventário grava o delta exato ($\Delta$) e reflete o novo saldo apurado no produto.
-4. Requisições concorrentes de saída para o mesmo produto são serializadas pelo PostgreSQL via lock pessimista, nunca permitindo saldo negativo.
+- [ ] **Subtarefa 4.1: Entidades de Domínio e Contratos com `tenant_id`**
+- [ ] **Subtarefa 4.2: DTOs Pydantic v2 com Conversor de Escala Fixa ($10^3$)**
+- [ ] **Subtarefa 4.3: Casos de Uso de Catálogo com Filtro Obrigatório por Tenant**
+  - `CreateProductUseCase`: valida categorias do mesmo tenant e persiste produto vinculado ao tenant.
+  - `ListProductsUseCase`: filtra produtos exclusivamente pelo `tenant_id` da requisição.
+  - `SoftDeleteProductUseCase`: inativa produto do tenant e gera evento `PRODUCT_DELETED` no Ledger do tenant.
+- [ ] **Subtarefa 4.4: Routers FastAPI com Proteção RBAC (`OWNER`/`GESTOR`)**
+- [ ] **Subtarefa 4.5: Testes de Catálogo Multi-Tenant e Cobertura $\ge 80\%$**
 
 ---
 
-## Task 5: Suíte de Testes e Validação Concorrente (PostgreSQL)
+## Task 5: Módulo do Livro-Razão de Estoque (Append-Only Ledger Multi-Tenant & Concorrência)
+> **Status:** **Planejada (Depende da Task 4)**
+> **PRD de Referência:** [PRD_TASK_4_INVENTORY_LEDGER.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_4_INVENTORY_LEDGER.md)
 
 ### 5.1. Contexto e Objetivo
-Configurar a infraestrutura de testes automatizados para rodar exclusivamente contra uma base PostgreSQL dedicada (garantindo paridade completa de ambiente e comportamentos de locks transacionais), executando testes de carga concorrente e auditoria de ponta a ponta.
+Implementar o Livro-Razão contábil perpétuo de movimentações (`stock_movements`), assegurando imutabilidade irrestrita, serialização atômica de concorrência com locks pessimistas (`SELECT ... FOR UPDATE`) filtrando por `(product_id, tenant_id)` e prevenção estrita de saldo negativo.
 
 ### 5.2. Subtarefas Detalhadas
+- [ ] **Subtarefa 5.1: Entidades Contábeis e Unit of Work Multi-Tenant**
+  - Implementar `InventoryUnitOfWork.get_product_for_update(product_id, tenant_id)`.
+- [ ] **Subtarefa 5.2: Casos de Uso Contábeis do Ledger**
+  - `RegisterStockInUseCase` (gera evento `IN` com `tenant_id`).
+  - `RegisterStockOutUseCase` (valida saldo do tenant, trava concorrência e gera evento `OUT`).
+  - `RegisterStockAdjustmentUseCase` (calcula $\Delta$ e atualiza saldo).
+  - `GetLedgerUseCase` (extrato filtrado pelo tenant ativo).
+- [ ] **Subtarefa 5.3: Endpoints RESTful de Inventário com RBAC**
+- [ ] **Subtarefa 5.4: Testes Unitários e de Concorrência com Cobertura $\ge 80\%$**
 
-- [ ] **Subtarefa 5.1: Fixtures de Teste com PostgreSQL**
-  - **Arquivos:** `backend/tests/conftest.py`
-  - **Ação:**
-    - Remover configuração de `sqlite:///./test_estoque.db`.
-    - Configurar fixture do `pytest` para conectar a um banco PostgreSQL dedicado de testes (`estoque_test_db`).
-    - Configurar ciclo de limpeza das tabelas por truncation controlada entre testes ou transações aninhadas (*nested transactions / savepoints*).
+---
 
-- [ ] **Subtarefa 5.2: Testes de Concorrência e Race Conditions**
-  - **Arquivos:** `backend/tests/test_concurrency.py`
-  - **Ação:**
-    - Criar teste com `ThreadPoolExecutor` disparando 10 saídas simultâneas de 1 unidade para um produto que possui apenas 5 unidades em estoque.
-    - Validar que exatamente 5 requisições obtiveram sucesso (`201 Created`) e as outras 5 foram rejeitadas com `422 Unprocessable Entity`.
-    - Validar que o saldo final é exatamente 0 (e nunca negativo) e que existem exatamente 5 registros de saída no Ledger.
+## Task 6: Suíte de Testes, Validação Concorrente & Isolamento Multi-Tenant
+> **Status:** **Planejada (Depende da Task 5)**
+> **PRD de Referência:** [PRD_TASK_5_TEST_SUITE_CONCURRENCY.md](file:///home/rodrigo/projects/extensao/docs/tasks/PRD_TASK_5_TEST_SUITE_CONCURRENCY.md)
 
-- [ ] **Subtarefa 5.3: Testes de Integridade de Idempotência e Auditoria Completa**
-  - **Arquivos:** `backend/tests/test_audit_flow.py`
-  - **Ação:**
-    - Executar fluxo completo: Cadastro de Produto -> Entrada de 10 UN -> Saída de 4 UN -> Ajuste para 8 UN -> Descontinuação do Produto (`PRODUCT_DELETED`).
-    - Requisitar extrato histórico do produto e verificar que a somatória dos deltas confere matematicamente com o saldo registrado.
-    - Testar retentativa de cada requisição com a mesma `X-Idempotency-Key` e assegurar que nenhuma duplicação ocorreu no Ledger.
+### 6.1. Contexto e Objetivo
+Consolidar a suíte global de testes automatizados com PostgreSQL 16 dedicado, executando testes de carga concorrente, auditoria de ponta a ponta e **provas matemáticas de zero vazamento de dados entre tenants (*zero data leakage*)**.
 
-### 5.3. Critérios de Aceitação da Task 5
-1. Toda a suíte de testes do pytest roda 100% verde contra o PostgreSQL sem nenhuma menção a SQLite.
-2. O teste de concorrência comprova que o bloqueio pessimista impede corrida de dados e bloqueia estoque negativo.
-3. A integridade contábil do Ledger é validada com assertivas matemáticas em todos os cenários de teste.
+### 6.2. Subtarefas Detalhadas
+- [ ] **Subtarefa 6.1: Fixtures de Teste Multi-Tenant no PostgreSQL**
+  - Fixtures para criação de múltiplos tenants (`Tenant A`, `Tenant B`), usuários e tokens autenticados.
+- [ ] **Subtarefa 6.2: Testes Estritos de Isolamento Cruzado (*Cross-Tenant Leakage*)**
+  - Provar que consultas no Tenant A jamais retornam produtos, extratos ou movimentações do Tenant B.
+- [ ] **Subtarefa 6.3: Testes de Concorrência e Race Conditions**
+  - Disparos simultâneos com `ThreadPoolExecutor` para validação de bloqueio pessimista e não-negatividade de estoque.
+- [ ] **Subtarefa 6.4: Auditoria Contábil de Ponta a Ponta**
+  - Prova matemática de reconciliação: $\sum \Delta_{\text{movements}} = \text{Product.current\_quantity}$.
+  - Relatório final com cobertura consolidada $\ge 80\%$.
