@@ -12,69 +12,71 @@ import {
   TableRow,
   TableHead,
   TableCell,
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
 } from "@/shared/components";
 import {
-  Boxes,
+  Warehouse,
   Plus,
   ArrowDownLeft,
   ArrowUpRight,
   RefreshCw,
   FileSpreadsheet,
   ScanBarcode,
-  PackageCheck,
+  SlidersHorizontal,
+  History,
+  CheckCircle2,
   AlertTriangle,
+  XCircle,
+  Clock,
 } from "lucide-react";
 
-// Mock representativo do Ledger e Catálogo de Estoque Físico
 const MOCK_STOCK_ITEMS = [
   {
     id: "prod-001",
     sku: "ROL-6204-2RS",
-    name: "Rolamento de Esferas 6204-2RS Blindado",
+    barcode: "7891234560012",
+    name: "Rolamento de Esferas 6204-2RS Blindado DDU",
     category: "Peças Mecânicas",
     unit: "UN",
     currentStock: "1.450",
     minStock: "500",
     status: "in-stock" as const,
-    lastMovement: "Hoje, 09:15",
+    shelf: "GALPÃO-A / RUA-03 / NÍVEL-02",
   },
   {
     id: "prod-002",
     sku: "OLE-ISO-VG68",
-    name: "Óleo Hidráulico Industrial ISO VG 68",
+    barcode: "7891234560029",
+    name: "Óleo Hidráulico Industrial Alta Viscosidade ISO VG 68",
     category: "Fluidos & Lubrificantes",
     unit: "L",
     currentStock: "120,500",
     minStock: "200",
     status: "low-stock" as const,
-    lastMovement: "Ontem, 16:40",
+    shelf: "GALPÃO-B / RUA-01 / NÍVEL-01",
   },
   {
     id: "prod-003",
     sku: "COR-V-B52",
-    name: "Correia de Transmissão em V Perfil B-52",
+    barcode: "7891234560036",
+    name: "Correia de Transmissão Industrial em V Perfil B-52",
     category: "Transmissão",
     unit: "UN",
     currentStock: "0",
     minStock: "25",
     status: "out-of-stock" as const,
-    lastMovement: "08/11/2026, 11:20",
+    shelf: "GALPÃO-A / RUA-04 / NÍVEL-03",
   },
   {
     id: "prod-004",
     sku: "GRA-LIT-EP2",
-    name: "Graxa de Lítio Multiuso Complexo EP-2",
+    barcode: "7891234560043",
+    name: "Graxa de Lítio Complexo EP-2 Resistente a Carga Extrema",
     category: "Fluidos & Lubrificantes",
     unit: "KG",
     currentStock: "84,250",
     minStock: "30",
     status: "in-stock" as const,
-    lastMovement: "09/11/2026, 14:00",
+    shelf: "GALPÃO-B / RUA-02 / NÍVEL-01",
   },
 ];
 
@@ -85,8 +87,9 @@ const MOCK_LEDGER_ENTRIES = [
     type: "IN" as const,
     delta: "+250",
     balanceAfter: "1.450 UN",
-    reason: "Recebimento NF 004812 - Fornecedor NSK",
+    reason: "Recebimento NF 004812 • Fornecedor NSK Brasil",
     idempotencyKey: "idem_9a8f12c4d9e",
+    operator: "carlos.silva",
   },
   {
     id: "mov-1002",
@@ -94,8 +97,9 @@ const MOCK_LEDGER_ENTRIES = [
     type: "OUT" as const,
     delta: "-40,000",
     balanceAfter: "120,500 L",
-    reason: "Ordem de Manutenção Prensa Hidráulica 04",
+    reason: "Ordem de Manutenção Preventiva Prensa Hidráulica 04",
     idempotencyKey: "idem_7b3e51a82f0",
+    operator: "marcos.lima",
   },
   {
     id: "mov-1003",
@@ -103,142 +107,244 @@ const MOCK_LEDGER_ENTRIES = [
     type: "ADJUSTMENT" as const,
     delta: "+4,250",
     balanceAfter: "84,250 KG",
-    reason: "Ajuste de inventário físico periódico (Galpão B)",
+    reason: "Ajuste de inventário físico periódico (Contagem Cíclica)",
     idempotencyKey: "idem_1f4c88e99a1",
+    operator: "auditoria.externa",
   },
 ];
 
-export default function DesignSystemShowcasePage() {
+export default function WarehouseWorkbenchPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<"estoque" | "ledger" | "tokens">("estoque");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    setTimeout(() => setIsRefreshing(false), 800);
+  };
 
   return (
-    <div className="min-h-screen bg-zinc-50 p-6 md:p-10 font-sans text-zinc-950">
-      <div className="max-w-7xl mx-auto space-y-8">
-        {/* Cabeçalho Operacional */}
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-200 pb-5">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-zinc-900 text-white rounded-md shadow-xs">
-                <Boxes className="w-5 h-5" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold tracking-tight text-zinc-950">
-                  Almoxarifado Central & Estoque Físico
-                </h1>
-                <p className="text-xs text-zinc-500">
-                  Operate Mode • Design System Impeccable • Alta Densidade & Precisão Tabular
-                </p>
-              </div>
+    <div className="min-h-screen bg-white text-zinc-950 font-sans selection:bg-zinc-900 selection:text-white">
+      {/* 1. TOP BAR INDUSTRIAL (Linear-grade, contínuo, sem cards) */}
+      <header className="border-b border-zinc-200 bg-white sticky top-0 z-30">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 h-12 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <Warehouse className="w-4 h-4 text-zinc-900" />
+              <span className="font-semibold text-xs tracking-wider uppercase text-zinc-950">
+                Almoxarifado Central
+              </span>
             </div>
+            <span className="text-zinc-300">/</span>
+            <span className="text-xs text-zinc-600 font-mono">
+              Galpão Principal • Tenant #01
+            </span>
           </div>
 
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
-              size="sm"
-              leftIcon={<FileSpreadsheet className="w-3.5 h-3.5" />}
+              size="xs"
+              leftIcon={<RefreshCw className={`w-3 h-3 ${isRefreshing ? "animate-spin" : ""}`} />}
+              onClick={handleRefresh}
             >
-              Exportar Ledger
+              Sincronizar
+            </Button>
+            <Button
+              variant="outline"
+              size="xs"
+              leftIcon={<FileSpreadsheet className="w-3 h-3" />}
+            >
+              Exportar
             </Button>
             <Button
               variant="solid"
-              size="sm"
-              leftIcon={<Plus className="w-3.5 h-3.5" />}
-              onClick={() => {
-                setIsLoading(true);
-                setTimeout(() => setIsLoading(false), 1200);
-              }}
-              isLoading={isLoading}
+              size="xs"
+              leftIcon={<Plus className="w-3 h-3" />}
             >
-              Nova Entrada (Ledger)
+              Registrar Movimento
             </Button>
           </div>
-        </header>
+        </div>
+      </header>
 
-        {/* Barra de Filtros e Busca Rápida (com suporte a Leitor de Código de Barras) */}
-        <section className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-          <div className="md:col-span-6">
-            <SearchInput
-              value={searchQuery}
-              onChange={setSearchQuery}
-              shortcutHint="Ctrl+K"
-              placeholder="Buscar SKU, código de barras EAN ou item de estoque..."
-            />
+      {/* 2. KPI STRIP (Métricas em Linha Contínua com divisores de 1px - Sem cards soltos!) */}
+      <section className="border-b border-zinc-200 bg-zinc-50/60">
+        <div className="max-w-[1600px] mx-auto grid grid-cols-2 sm:grid-cols-4 divide-x divide-zinc-200">
+          <div className="px-5 py-3">
+            <span className="block text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+              Total de Itens Cadastrados
+            </span>
+            <div className="flex items-baseline gap-2 mt-0.5">
+              <span className="text-xl font-bold font-mono tabular-nums text-zinc-950">
+                1.842
+              </span>
+              <span className="text-[11px] text-zinc-500 font-mono">SKUs</span>
+            </div>
           </div>
-          <div className="md:col-span-3">
-            <Input
-              size="md"
-              placeholder="EAN-13 / Leitor..."
-              value={barcodeInput}
-              onChange={(e) => setBarcodeInput(e.target.value)}
-              monoNumbers
-              leftAddon={<ScanBarcode className="w-4 h-4" />}
-            />
-          </div>
-          <div className="md:col-span-3 flex gap-2">
-            <Button variant="secondary" size="md" className="w-full">
-              Filtrar por Categoria
-            </Button>
-            <Button variant="outline" size="md" leftIcon={<RefreshCw className="w-3.5 h-3.5" />}>
-              Atualizar
-            </Button>
-          </div>
-        </section>
 
-        {/* Tabela Densa de Catálogo e Posição Física */}
-        <Card>
-          <CardHeader
-            action={
+          <div className="px-5 py-3">
+            <span className="block text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+              Posição Física Ativa
+            </span>
+            <div className="flex items-baseline gap-2 mt-0.5">
+              <span className="text-xl font-bold font-mono tabular-nums text-emerald-700">
+                98,4%
+              </span>
+              <span className="text-[11px] text-emerald-600 font-medium">Regular</span>
+            </div>
+          </div>
+
+          <div className="px-5 py-3">
+            <span className="block text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+              Itens em Ponto de Reposição
+            </span>
+            <div className="flex items-baseline gap-2 mt-0.5">
+              <span className="text-xl font-bold font-mono tabular-nums text-amber-700">
+                12
+              </span>
+              <span className="text-[11px] text-amber-600 font-medium">Atenção</span>
+            </div>
+          </div>
+
+          <div className="px-5 py-3">
+            <span className="block text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+              Última Movimentação (Ledger)
+            </span>
+            <div className="flex items-baseline gap-2 mt-0.5">
+              <span className="text-sm font-semibold font-mono tabular-nums text-zinc-900">
+                09:15:22
+              </span>
+              <span className="text-[11px] text-zinc-500 font-mono">Hoje</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 3. WORKBENCH TOOLBAR (Busca rápida por código de barras + abas em linha) */}
+      <section className="border-b border-zinc-200 bg-white">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-2.5 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          {/* Navegação por Abas Industriais */}
+          <div className="flex items-center gap-1 border border-zinc-200 p-0.5 rounded bg-zinc-100/70">
+            <button
+              onClick={() => setActiveTab("estoque")}
+              className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${
+                activeTab === "estoque"
+                  ? "bg-white text-zinc-950 shadow-xs border border-zinc-200/80"
+                  : "text-zinc-600 hover:text-zinc-950"
+              }`}
+            >
+              Posição Física de Estoque
+            </button>
+            <button
+              onClick={() => setActiveTab("ledger")}
+              className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${
+                activeTab === "ledger"
+                  ? "bg-white text-zinc-950 shadow-xs border border-zinc-200/80"
+                  : "text-zinc-600 hover:text-zinc-950"
+              }`}
+            >
+              Extrato do Ledger (Auditoria Perpétua)
+            </button>
+            <button
+              onClick={() => setActiveTab("tokens")}
+              className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${
+                activeTab === "tokens"
+                  ? "bg-white text-zinc-950 shadow-xs border border-zinc-200/80"
+                  : "text-zinc-600 hover:text-zinc-950"
+              }`}
+            >
+              Design System Tokens
+            </button>
+          </div>
+
+          {/* Filtros em linha */}
+          <div className="flex items-center gap-2 max-w-xl w-full md:w-auto">
+            <div className="w-full md:w-80">
+              <SearchInput
+                size="sm"
+                value={searchQuery}
+                onChange={setSearchQuery}
+                shortcutHint="Ctrl+K"
+                placeholder="Buscar SKU, item ou código de barras..."
+              />
+            </div>
+            <div className="w-44 hidden sm:block">
+              <Input
+                size="sm"
+                placeholder="Leitor EAN..."
+                value={barcodeInput}
+                onChange={(e) => setBarcodeInput(e.target.value)}
+                monoNumbers
+                leftAddon={<ScanBarcode className="w-3.5 h-3.5" />}
+              />
+            </div>
+            <Button variant="outline" size="xs" leftIcon={<SlidersHorizontal className="w-3 h-3" />}>
+              Filtros
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* 4. ÁREA PRINCIPAL DO WORKBENCH (Tabelas de alta densidade sem cards arredondados) */}
+      <main className="max-w-[1600px] mx-auto px-4 sm:px-6 py-4">
+        {activeTab === "estoque" && (
+          <div className="border border-zinc-200 rounded overflow-hidden">
+            <div className="px-4 py-2 bg-zinc-50/75 border-b border-zinc-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Badge variant="in-stock" size="sm" showDot>
-                  2 Saudáveis
-                </Badge>
-                <Badge variant="low-stock" size="sm" showDot>
-                  1 Crítico
-                </Badge>
-                <Badge variant="out-of-stock" size="sm" showDot>
-                  1 Esgotado
-                </Badge>
+                <span className="text-xs font-semibold text-zinc-800 uppercase tracking-wider">
+                  Catálogo Operacional & Saldos Físicos
+                </span>
+                <span className="text-[11px] text-zinc-500 font-mono">
+                  (Inteiro Escalado $x1000$ • Precisão 3 Decimais)
+                </span>
               </div>
-            }
-          >
-            <CardTitle>Posição de Estoque Físico Atual</CardTitle>
-            <CardDescription>
-              Valores calculados em inteiro escalado ($x1000$) e exibidos em precisão tabular
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-zinc-500 font-medium">Legenda:</span>
+                <Badge variant="in-stock" size="sm" showDot>Em Estoque</Badge>
+                <Badge variant="low-stock" size="sm" showDot>Reposição</Badge>
+                <Badge variant="out-of-stock" size="sm" showDot>Zerado</Badge>
+              </div>
+            </div>
+
             <Table dense>
               <TableHeader>
                 <TableRow interactive={false}>
-                  <TableHead className="w-36">SKU / Código</TableHead>
-                  <TableHead>Descrição do Item</TableHead>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead className="w-20">UOM</TableHead>
-                  <TableHead numeric className="w-32">Saldo Atual</TableHead>
+                  <TableHead className="w-36">Código / SKU</TableHead>
+                  <TableHead className="w-40 font-mono text-xs">Código de Barras</TableHead>
+                  <TableHead>Descrição Técnica do Item</TableHead>
+                  <TableHead className="w-40">Localização Física</TableHead>
+                  <TableHead className="w-16 text-center">UOM</TableHead>
+                  <TableHead numeric className="w-32">Saldo Físico</TableHead>
                   <TableHead numeric className="w-28">Estoque Mín.</TableHead>
-                  <TableHead className="w-36">Status</TableHead>
-                  <TableHead className="w-40 text-right">Ações</TableHead>
+                  <TableHead className="w-32">Status</TableHead>
+                  <TableHead className="w-36 text-right">Ação Direta</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {MOCK_STOCK_ITEMS.map((item) => (
                   <TableRow key={item.id}>
-                    <TableCell numeric className="font-semibold text-zinc-900">
+                    <TableCell numeric className="font-semibold text-zinc-950">
                       {item.sku}
                     </TableCell>
-                    <TableCell className="font-medium text-zinc-950">
-                      {item.name}
+                    <TableCell numeric className="text-zinc-500 text-xs">
+                      {item.barcode}
                     </TableCell>
                     <TableCell>
-                      <span className="inline-flex px-2 py-0.5 rounded text-xs bg-zinc-100 text-zinc-700 font-medium">
+                      <div className="font-medium text-zinc-950 text-xs">
+                        {item.name}
+                      </div>
+                      <div className="text-[11px] text-zinc-500">
                         {item.category}
-                      </span>
+                      </div>
                     </TableCell>
-                    <TableCell>
-                      <span className="font-mono text-xs font-semibold text-zinc-600 bg-zinc-100/80 px-1.5 py-0.5 rounded">
+                    <TableCell className="font-mono text-[11px] text-zinc-600">
+                      {item.shelf}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className="font-mono text-[11px] font-semibold text-zinc-700 bg-zinc-100 px-1 py-0.5 rounded">
                         {item.unit}
                       </span>
                     </TableCell>
@@ -267,11 +373,11 @@ export default function DesignSystemShowcasePage() {
                     </TableCell>
                     <TableCell align="right">
                       <div className="flex items-center justify-end gap-1.5">
-                        <Button variant="outline" size="xs">
+                        <Button variant="solid" size="xs">
                           Movimentar
                         </Button>
-                        <Button variant="ghost" size="xs">
-                          Histórico
+                        <Button variant="outline" size="xs">
+                          Extrato
                         </Button>
                       </div>
                     </TableCell>
@@ -279,39 +385,41 @@ export default function DesignSystemShowcasePage() {
                 ))}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
+          </div>
+        )}
 
-        {/* Extrato do Livro-Razão (Ledger Imutável) */}
-        <Card>
-          <CardHeader
-            action={
+        {activeTab === "ledger" && (
+          <div className="border border-zinc-200 rounded overflow-hidden">
+            <div className="px-4 py-2 bg-zinc-50/75 border-b border-zinc-200 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-zinc-800 uppercase tracking-wider">
+                  Livro-Razão de Movimentações (Ledger Append-Only)
+                </span>
+                <span className="text-[11px] text-zinc-500 font-mono">
+                  • Imutável • No Hard-Delete • RFC 9474 Idempotente
+                </span>
+              </div>
               <Badge variant="info" size="sm">
-                Auditoria Perpétua RFC 9474
+                Conferência Fiscal Ativa
               </Badge>
-            }
-          >
-            <CardTitle>Extrato de Movimentações Recentes (Ledger Append-Only)</CardTitle>
-            <CardDescription>
-              Nenhum dado é apagado ou sobrescrito. Cada movimentação possui chave de idempotência e saldo após movimento.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
+            </div>
+
             <Table dense>
               <TableHeader>
                 <TableRow interactive={false}>
-                  <TableHead className="w-44">Data / Hora</TableHead>
-                  <TableHead className="w-28">Tipo</TableHead>
+                  <TableHead className="w-44">Data & Hora</TableHead>
+                  <TableHead className="w-28">Operação</TableHead>
                   <TableHead numeric className="w-28">Delta</TableHead>
-                  <TableHead numeric className="w-36">Saldo Resultante</TableHead>
-                  <TableHead>Motivo / Documento</TableHead>
-                  <TableHead className="w-48 text-right font-mono text-xs">Chave Idempotência</TableHead>
+                  <TableHead numeric className="w-36">Saldo Após Movimento</TableHead>
+                  <TableHead>Histórico / Documento de Origem</TableHead>
+                  <TableHead className="w-36 font-mono text-xs">Operador</TableHead>
+                  <TableHead className="w-44 text-right font-mono text-xs">Idempotency Key</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {MOCK_LEDGER_ENTRIES.map((entry) => (
                   <TableRow key={entry.id}>
-                    <TableCell numeric className="text-zinc-500 text-xs">
+                    <TableCell numeric className="text-zinc-600 text-xs">
                       {entry.timestamp}
                     </TableCell>
                     <TableCell>
@@ -337,7 +445,7 @@ export default function DesignSystemShowcasePage() {
                         entry.type === "IN"
                           ? "text-emerald-700 font-bold"
                           : entry.type === "OUT"
-                          ? "text-zinc-900 font-bold"
+                          ? "text-zinc-950 font-bold"
                           : "text-indigo-700 font-bold"
                       }
                     >
@@ -349,6 +457,9 @@ export default function DesignSystemShowcasePage() {
                     <TableCell className="text-xs text-zinc-700">
                       {entry.reason}
                     </TableCell>
+                    <TableCell className="font-mono text-xs text-zinc-500">
+                      {entry.operator}
+                    </TableCell>
                     <TableCell align="right" className="font-mono text-[11px] text-zinc-400">
                       {entry.idempotencyKey}
                     </TableCell>
@@ -356,77 +467,75 @@ export default function DesignSystemShowcasePage() {
                 ))}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
+          </div>
+        )}
 
-        {/* Guia de Estilos / Componentes em Isolamento */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Variantes de Botão */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Variantes de Botão</CardTitle>
-              <CardDescription>Focus states nítidos e feedback tátil</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex flex-wrap gap-2">
-                <Button variant="solid" size="sm">Solid (Padrão)</Button>
+        {activeTab === "tokens" && (
+          <div className="border border-zinc-200 rounded p-5 bg-white space-y-6">
+            <div>
+              <h2 className="text-xs font-semibold text-zinc-900 uppercase tracking-wider">
+                Catálogo de Componentes e Diretrizes Impeccable
+              </h2>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Design System sem cartões arredondados ou sombras difusas. Precisão geométrica de 1px e foco operacional.
+              </p>
+            </div>
+
+            {/* Painel de Botões */}
+            <div className="border-t border-zinc-200 pt-4">
+              <h3 className="text-xs font-semibold text-zinc-700 mb-2">1. Botões de Ação (Focus States Nítidos)</h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="solid" size="xs">Solid XS</Button>
+                <Button variant="solid" size="sm">Solid SM</Button>
+                <Button variant="solid" size="md">Solid MD</Button>
                 <Button variant="secondary" size="sm">Secondary</Button>
                 <Button variant="outline" size="sm">Outline</Button>
                 <Button variant="ghost" size="sm">Ghost</Button>
                 <Button variant="danger" size="sm">Danger</Button>
+                <Button variant="solid" size="sm" isLoading>Processando</Button>
+                <Button variant="solid" size="sm" disabled>Desabilitado</Button>
               </div>
-              <div className="pt-2 border-t border-zinc-100 flex gap-2">
-                <Button variant="solid" size="xs" disabled>Desabilitado</Button>
-                <Button variant="solid" size="xs" isLoading>Salvando</Button>
-              </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          {/* Variantes de Badges */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Badges & Status</CardTitle>
-              <CardDescription>Contraste estrito para leitura rápida</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex flex-wrap gap-2">
+            {/* Painel de Badges */}
+            <div className="border-t border-zinc-200 pt-4">
+              <h3 className="text-xs font-semibold text-zinc-700 mb-2">2. Badges de Estoque e Ledger (Sem pills infladas)</h3>
+              <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="in-stock" size="sm" showDot>Em Estoque</Badge>
-                <Badge variant="low-stock" size="sm" showDot>Estoque Baixo</Badge>
-                <Badge variant="out-of-stock" size="sm" showDot>Zerado</Badge>
+                <Badge variant="low-stock" size="sm" showDot>Ponto Reposição</Badge>
+                <Badge variant="out-of-stock" size="sm" showDot>Zerado / Crítico</Badge>
                 <Badge variant="inactive" size="sm">Inativo</Badge>
+                <Badge variant="ledger-in" size="sm">+ ENTRADA</Badge>
+                <Badge variant="ledger-out" size="sm">- SAÍDA</Badge>
+                <Badge variant="ledger-adjust" size="sm">Δ AJUSTE</Badge>
               </div>
-              <div className="pt-2 border-t border-zinc-100 flex flex-wrap gap-2">
-                <Badge variant="ledger-in" size="sm">+ Entrada</Badge>
-                <Badge variant="ledger-out" size="sm">- Saída</Badge>
-                <Badge variant="ledger-adjust" size="sm">Δ Ajuste</Badge>
-              </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          {/* Inputs & Formatação */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Inputs & Campos</CardTitle>
-              <CardDescription>Precisão para valores e leitor de código</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Input
-                label="Quantidade Física"
-                placeholder="0,000"
-                rightAddon="KG"
-                monoNumbers
-                size="sm"
-              />
-              <Input
-                label="Código com Erro"
-                defaultValue="EAN-INVÁLIDO"
-                error="Formato de código inválido para o produto"
-                size="sm"
-              />
-            </CardContent>
-          </Card>
+            {/* Painel de Inputs */}
+            <div className="border-t border-zinc-200 pt-4">
+              <h3 className="text-xs font-semibold text-zinc-700 mb-2">3. Inputs Industriais com suporte a Leitores</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-3xl">
+                <Input label="Quantidade Física (KG)" placeholder="0,000" rightAddon="KG" monoNumbers size="sm" />
+                <Input label="Código EAN / SKU" placeholder="789000123" monoNumbers size="sm" />
+                <Input label="Com Validação de Erro" defaultValue="ERR_QTD" error="Quantidade excede capacidade física" size="sm" />
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* 5. FOOTER OPERACIONAL DE BANCADA */}
+      <footer className="border-t border-zinc-200 bg-zinc-50/75 py-2 px-4 sm:px-6 text-xs text-zinc-500 flex flex-col sm:flex-row items-center justify-between gap-2 mt-8">
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          <span>Sessão Ativa: <strong className="text-zinc-700 font-mono">carlos.silva (Conferente Sênior)</strong></span>
+          <span className="text-zinc-300">•</span>
+          <span>Terminal: <strong className="text-zinc-700 font-mono">BANCADA-EXPEDICAO-01</strong></span>
         </div>
-      </div>
+        <div className="font-mono text-[11px] text-zinc-400">
+          Escala Fixa: x1000 • Latência: 12ms • Idempotência: RFC 9474
+        </div>
+      </footer>
     </div>
   );
 }

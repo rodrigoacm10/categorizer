@@ -69,8 +69,8 @@ export const Badge: React.FC<BadgeProps> = ({
 
   const sizeClass =
     size === "sm"
-      ? "text-[10px] px-1.5 py-0.5 font-semibold tracking-wider uppercase rounded"
-      : "text-xs px-2.5 py-1 font-medium rounded-full";
+      ? "text-[10px] px-1.5 py-0.5 font-semibold tracking-wide uppercase rounded"
+      : "text-xs px-2 py-0.5 font-medium rounded";
 
   return (
     <span

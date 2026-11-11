@@ -60,8 +60,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             disabled={disabled}
             required={required}
             className={cn(
-              "w-full rounded-md border bg-white text-zinc-950 placeholder:text-zinc-400 transition-colors shadow-xs",
-              "border-zinc-200 hover:border-zinc-300",
+              "w-full rounded border bg-white text-zinc-950 placeholder:text-zinc-400 transition-colors",
+              "border-zinc-300 hover:border-zinc-400",
               "focus:outline-none focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950",
               "disabled:bg-zinc-50 disabled:text-zinc-400 disabled:border-zinc-200 disabled:cursor-not-allowed",
               error && "border-rose-500 focus:border-rose-600 focus:ring-rose-600 text-rose-950",

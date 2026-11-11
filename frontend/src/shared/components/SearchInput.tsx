@@ -62,8 +62,8 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           className={cn(
-            "w-full rounded-md border bg-white text-zinc-950 placeholder:text-zinc-400 shadow-xs transition-colors",
-            "border-zinc-200 hover:border-zinc-300",
+            "w-full rounded border bg-white text-zinc-950 placeholder:text-zinc-400 transition-colors",
+            "border-zinc-300 hover:border-zinc-400",
             "focus:outline-none focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950",
             isCompact ? "h-8 pl-8 pr-16 text-xs" : "h-9 pl-9 pr-20 text-sm",
             "font-mono tabular-nums"
