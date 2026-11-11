@@ -16,6 +16,8 @@ from app.core.config import Settings
 from app.shared.infrastructure.database import engine, get_db, Base
 from app.shared.infrastructure.seed import seed_initial_categories
 from app.shared.utils.scale import to_scaled_int, from_scaled_int, format_quantity_ptbr
+from app.modules.auth.infrastructure.models import UserModel
+from app.modules.tenants.infrastructure.models import TenantModel, TenantMembershipModel
 from app.modules.products.infrastructure.models import (
     Product,
     ProductModel,
@@ -94,6 +96,8 @@ def test_models_native_types():
     assert Product is ProductModel
     assert isinstance(Product.id.type, UUID)
     assert Product.id.type.as_uuid is True
+    assert isinstance(Product.tenant_id.type, UUID)
+    assert Product.tenant_id.type.as_uuid is True
     assert isinstance(Product.current_quantity.type, BigInteger)
     assert isinstance(Product.min_stock.type, BigInteger)
     assert isinstance(Product.created_at.type, DateTime)
@@ -107,6 +111,8 @@ def test_models_native_types():
     assert Category is CategoryModel
     assert isinstance(Category.id.type, UUID)
     assert Category.id.type.as_uuid is True
+    assert isinstance(Category.tenant_id.type, UUID)
+    assert Category.tenant_id.type.as_uuid is True
     assert isinstance(Category.created_at.type, DateTime)
     assert Category.created_at.type.timezone is True
 
@@ -120,6 +126,8 @@ def test_models_native_types():
     assert StockMovement is StockMovementModel
     assert isinstance(StockMovement.id.type, UUID)
     assert StockMovement.id.type.as_uuid is True
+    assert isinstance(StockMovement.tenant_id.type, UUID)
+    assert StockMovement.tenant_id.type.as_uuid is True
     assert isinstance(StockMovement.product_id.type, UUID)
     assert StockMovement.product_id.type.as_uuid is True
     assert isinstance(StockMovement.quantity.type, BigInteger)
@@ -129,12 +137,19 @@ def test_models_native_types():
 
     # 5. IdempotencyRecord / IdempotencyRecordModel
     assert IdempotencyRecord is IdempotencyRecordModel
+    assert isinstance(IdempotencyRecord.tenant_id.type, UUID)
+    assert IdempotencyRecord.tenant_id.type.as_uuid is True
     assert isinstance(IdempotencyRecord.created_at.type, DateTime)
     assert IdempotencyRecord.created_at.type.timezone is True
     assert isinstance(IdempotencyRecord.updated_at.type, DateTime)
     assert IdempotencyRecord.updated_at.type.timezone is True
 
-    # 6. utc_now helpers
+    # 6. Auth e Tenancy Models
+    assert isinstance(UserModel.id.type, UUID)
+    assert isinstance(TenantModel.id.type, UUID)
+    assert isinstance(TenantMembershipModel.id.type, UUID)
+
+    # 7. utc_now helpers
     for fn in (products_utc_now, inventory_utc_now, idempotency_utc_now):
         now = fn()
         assert now.tzinfo is not None
@@ -144,10 +159,9 @@ def test_models_native_types():
 def test_foreign_key_ondelete_restrict(db_session: Session):
     """Valida que a constraint de FK entre stock_movements e products possui regra RESTRICT e impede deleção."""
     # 1. Inspeção de metadados
-    fk_list = list(StockMovement.__table__.foreign_keys)
-    assert len(fk_list) == 1
-    fk = fk_list[0]
-    assert fk.target_fullname == "products.id"
+    product_fks = [fk for fk in StockMovement.__table__.foreign_keys if fk.target_fullname == "products.id"]
+    assert len(product_fks) == 1
+    fk = product_fks[0]
     assert fk.ondelete == "RESTRICT"
 
     # Valida ausência de cascade delete no relacionamento Product.movements
@@ -155,8 +169,14 @@ def test_foreign_key_ondelete_restrict(db_session: Session):
     assert not cascade_options.delete
     assert not cascade_options.delete_orphan
 
-    # 2. Validação física no banco de dados
+    # 2. Validação física no banco de dados com tenant associado
+    tenant = TenantModel(name="Tenant Test Restrict", slug="test-restrict")
+    db_session.add(tenant)
+    db_session.commit()
+    db_session.refresh(tenant)
+
     product = Product(
+        tenant_id=tenant.id,
         name="Produto Teste Restrict FK",
         unit="UN",
         current_quantity=10000,
@@ -166,6 +186,7 @@ def test_foreign_key_ondelete_restrict(db_session: Session):
     db_session.refresh(product)
 
     movement = StockMovement(
+        tenant_id=tenant.id,
         product_id=product.id,
         type="IN",
         quantity=10000,
@@ -194,7 +215,7 @@ def test_alembic_migrations_bidirectional():
     # Garante banco de testes limpo antes da migração Alembic
     from sqlalchemy import text
     with test_clean_engine.connect() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS alembic_version, stock_movements, product_categories, products, categories, idempotency_records CASCADE;"))
+        conn.execute(text("DROP TABLE IF EXISTS alembic_version, stock_movements, product_categories, products, categories, idempotency_records, tenant_memberships, tenants, users CASCADE;"))
         conn.commit()
 
     ini_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "alembic.ini")
