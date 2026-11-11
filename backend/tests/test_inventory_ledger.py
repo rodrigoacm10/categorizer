@@ -567,3 +567,87 @@ def test_unit_of_work_transaction_rollback(db_session, default_tenant):
     assert len(movs) == 0
 
 
+def test_pure_stock_movement_domain_entity(db_session, default_tenant):
+    """
+    15. Entidade Pura de Domínio e Inserção via Dataclass no Repositório:
+    Valida instanciamento da entidade pura, enums, pós-inicialização e conversão no repositório.
+    """
+    from app.modules.products.infrastructure.models import ProductModel
+    prod = ProductModel(
+        name="Item Pure Entity Test",
+        unit="UN",
+        current_quantity=to_scaled_int(50),
+        tenant_id=default_tenant.id,
+    )
+    db_session.add(prod)
+    db_session.commit()
+    db_session.refresh(prod)
+
+    # Criação via MovementType enum
+    entity1 = StockMovement(
+        tenant_id=default_tenant.id,
+        product_id=prod.id,
+        type=MovementType.IN,
+        quantity=to_scaled_int(25),
+        balance_after=to_scaled_int(75),
+        reason="Entrada pura",
+    )
+    assert entity1.type == "IN"
+    assert entity1.id is not None
+    assert entity1.created_at is not None
+
+    # Criação via string lowercase
+    entity2 = StockMovement(
+        tenant_id=default_tenant.id,
+        product_id=prod.id,
+        type="out",
+        quantity=to_scaled_int(-10),
+        balance_after=to_scaled_int(65),
+        reason="Saída pura",
+    )
+    assert entity2.type == "OUT"
+
+    # Inserção no repositório aceitando entidade de domínio pura
+    repo = StockMovementRepository(db_session)
+    saved_model = repo.append(entity1)
+    db_session.commit()
+
+    assert saved_model.id == entity1.id
+    assert saved_model.quantity == to_scaled_int(25)
+    assert saved_model.balance_after == to_scaled_int(75)
+
+
+def test_unit_of_work_lifecycle_and_single_arg_lock(default_tenant):
+    """
+    16. Ciclo de Vida do UnitOfWork e Lock com Argumento Único:
+    Valida UoW instanciado com session_factory, enter/exit, commit/rollback e lock apenas por product_id.
+    """
+    from app.modules.products.infrastructure.models import ProductModel
+    session = TestingSessionLocal()
+    prod = ProductModel(
+        name="Item UoW Factory",
+        unit="UN",
+        current_quantity=to_scaled_int(30),
+        tenant_id=default_tenant.id,
+    )
+    session.add(prod)
+    session.commit()
+    prod_id = prod.id
+    session.close()
+
+    # UoW instanciado com fábrica de sessões (session_factory)
+    uow = InventoryUnitOfWork(session_factory_or_session=TestingSessionLocal)
+    with uow:
+        # Busca com argumento único de product_id
+        p = uow.get_product_for_update(prod_id)
+        assert p is not None
+        assert p.id == prod_id
+        p.current_quantity = to_scaled_int(40)
+        uow.commit()
+
+    # Confirma que sessão foi fechada e persistência ocorreu
+    verify_session = TestingSessionLocal()
+    p_verify = verify_session.query(ProductModel).filter(ProductModel.id == prod_id).first()
+    assert p_verify.current_quantity == to_scaled_int(40)
+    verify_session.close()
+
