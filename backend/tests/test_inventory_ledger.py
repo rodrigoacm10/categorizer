@@ -289,3 +289,66 @@ def test_pessimistic_lock_concurrency(db_session, default_tenant):
     assert updated_prod.current_quantity == 4000
 
 
+def test_idempotency_protection_on_ledger(client):
+    """
+    8. Idempotência estrita no Ledger (RFC 9474):
+    Garante que retransmissões com a mesma X-Idempotency-Key retornem Cache HIT
+    sem duplicar movimentos no banco de dados.
+    """
+    prod = client.post("/api/products", json={
+        "name": "Cimento Idempotente",
+        "unit": "SC",
+        "initial_quantity": 50.0,
+    }).json()
+    prod_id = prod["id"]
+
+    idempotency_key = f"idem-ledger-{uuid.uuid4()}"
+    payload = {
+        "product_id": prod_id,
+        "quantity": 20.0,
+        "reason": "Carga inicial idempotente",
+    }
+
+    # 1. Primeira chamada: MISS
+    res1 = client.post(
+        "/api/inventory/in",
+        json=payload,
+        headers={"X-Idempotency-Key": idempotency_key},
+    )
+    assert res1.status_code == 201
+    assert res1.headers.get("X-Cache") == "MISS"
+    assert float(res1.json()["balance_after"]) == 70.0
+
+    # 2. Segunda chamada (replay idêntico): HIT
+    res2 = client.post(
+        "/api/inventory/in",
+        json=payload,
+        headers={"X-Idempotency-Key": idempotency_key},
+    )
+    assert res2.status_code == 201
+    assert res2.headers.get("X-Cache") == "HIT"
+    assert float(res2.json()["balance_after"]) == 70.0  # Saldo permanece 70.0
+
+    # Confirma que há exatamente 1 lançamento correspondente à carga inicial idempotente
+    movs = client.get(f"/api/inventory/products/{prod_id}/movements").json()
+    idem_movs = [m for m in movs if m["reason"] == "Carga inicial idempotente"]
+    assert len(idem_movs) == 1
+    # Total de movimentos IN: 1 de criação do produto + 1 da chamada idempotente (não houve duplicação)
+    in_movs = [m for m in movs if m["type"] == "IN"]
+    assert len(in_movs) == 2
+
+    # 3. Terceira chamada: Mesma chave com payload alterado -> 409 CONFLICT
+    payload_tampered = {
+        "product_id": prod_id,
+        "quantity": 99.0,
+        "reason": "Tentativa de alteração",
+    }
+    res3 = client.post(
+        "/api/inventory/in",
+        json=payload_tampered,
+        headers={"X-Idempotency-Key": idempotency_key},
+    )
+    assert res3.status_code == 409
+    assert "Chave de Idempotência já utilizada" in res3.json()["detail"]
+
+
