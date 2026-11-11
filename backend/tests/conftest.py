@@ -19,6 +19,8 @@ os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
 from app.shared.infrastructure.database import Base, get_db
 # Garante o registro de todos os modelos no Base.metadata para isolamento dos testes
+from app.modules.auth.infrastructure.models import UserModel
+from app.modules.tenants.infrastructure.models import TenantModel, TenantMembershipModel
 from app.modules.products.infrastructure.models import (
     ProductModel,
     CategoryModel,
@@ -26,6 +28,7 @@ from app.modules.products.infrastructure.models import (
 )
 from app.modules.inventory.infrastructure.models import StockMovementModel
 from app.modules.idempotency.infrastructure.models import IdempotencyRecordModel
+from app.core.security import get_password_hash, create_access_token
 from app.main import app
 
 test_engine = create_engine(
@@ -33,6 +36,7 @@ test_engine = create_engine(
     pool_pre_ping=True,
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+
 
 @pytest.fixture(autouse=True)
 def setup_database():
@@ -42,6 +46,7 @@ def setup_database():
     yield
     Base.metadata.drop_all(bind=test_engine)
 
+
 @pytest.fixture
 def db_session():
     db = TestingSessionLocal()
@@ -50,8 +55,54 @@ def db_session():
     finally:
         db.close()
 
+
 @pytest.fixture
-def client(db_session):
+def default_tenant(db_session):
+    tenant = TenantModel(
+        name="Default Test Tenant",
+        slug="default",
+        description="Tenant de teste inicial",
+        is_active=True,
+    )
+    db_session.add(tenant)
+    db_session.commit()
+    db_session.refresh(tenant)
+    return tenant
+
+
+@pytest.fixture
+def default_user(db_session, default_tenant):
+    user = UserModel(
+        email="owner.test@empresa.com",
+        password_hash=get_password_hash("SenhaSegura123"),
+        full_name="Owner Tester",
+        is_active=True,
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+
+    membership = TenantMembershipModel(
+        user_id=user.id,
+        tenant_id=default_tenant.id,
+        role="OWNER",
+    )
+    db_session.add(membership)
+    db_session.commit()
+    return user
+
+
+@pytest.fixture
+def auth_headers(default_user, default_tenant):
+    token = create_access_token({"sub": str(default_user.id), "email": default_user.email})
+    return {
+        "Authorization": f"Bearer {token}",
+        "X-Tenant-ID": str(default_tenant.id),
+    }
+
+
+@pytest.fixture
+def client(db_session, auth_headers):
     def override_get_db():
         try:
             yield db_session
@@ -59,6 +110,6 @@ def client(db_session):
             pass
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
+    with TestClient(app, headers=auth_headers) as c:
         yield c
     app.dependency_overrides.clear()

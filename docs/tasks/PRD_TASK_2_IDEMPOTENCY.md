@@ -3,11 +3,11 @@
 ---
 
 ## 1. Identificação da Tarefa
-- **Identificador:** `TASK-02`
-- **Nome:** Módulo de Idempotência e Tolerância a Falhas de Rede
-- **Escopo:** Hasher Semântico, Tabela de Auditoria, Interceptor/Guard FastAPI e Replay de Respostas
+- **Identificador:** `TASK-03` (anteriormente `TASK-02`)
+- **Nome:** Módulo de Idempotência e Tolerância a Falhas de Rede por Tenant
+- **Escopo:** Hasher Semântico com Tenant Context, Tabela de Auditoria, Interceptor/Guard FastAPI e Replay de Respostas
 - **Responsável:** `code_implementer` (supervisionado por `orchestrator`)
-- **Status:** Planejada / Depende da Task 1
+- **Status:** Planejada / Depende da Task 1 e Task 2 (TASK-AUTH-TENANCY)
 - **Requisito Mandatório de Qualidade:** **Cobertura de testes unitários e de integração $\ge 80\%$** aferida via `pytest-cov`.
 
 ---
@@ -35,13 +35,13 @@ A implementação adota a especificação **RFC 9474 (The Idempotency-Key HTTP H
       FAILED = "FAILED"
   ```
 - Definir em `app/modules/idempotency/domain/entities.py`:
-  - `IdempotencyRecord`: com campos `key`, `request_hash`, `endpoint`, `status`, `response_code`, `response_body`, `created_at`, `updated_at`.
+  - `IdempotencyRecord`: com campos `key`, `tenant_id`, `request_hash`, `endpoint`, `status`, `response_code`, `response_body`, `created_at`, `updated_at`.
 - Definir contrato de repositório em `app/modules/idempotency/domain/repositories.py`:
   - `IIdempotencyRepository`:
-    - `get_by_key(key: str) -> Optional[IdempotencyRecord]`
+    - `get_by_key(tenant_id: UUID, key: str) -> Optional[IdempotencyRecord]`
     - `save(record: IdempotencyRecord) -> None`
-    - `mark_completed(key: str, response_code: int, response_body: str) -> None`
-    - `mark_failed(key: str) -> None`
+    - `mark_completed(tenant_id: UUID, key: str, response_code: int, response_body: str) -> None`
+    - `mark_failed(tenant_id: UUID, key: str) -> None`
 
 ### 3.2. RF-02: Modelo de Persistência no PostgreSQL
 - Em `app/modules/idempotency/infrastructure/models.py`:
@@ -50,6 +50,7 @@ A implementação adota a especificação **RFC 9474 (The Idempotency-Key HTTP H
       __tablename__ = "idempotency_records"
 
       key = Column(String(255), primary_key=True, index=True)
+      tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
       request_hash = Column(String(64), nullable=False)
       endpoint = Column(String(255), nullable=False)
       status = Column(String(32), nullable=False, default=IdempotencyStatus.PROCESSING.value)
@@ -57,6 +58,10 @@ A implementação adota a especificação **RFC 9474 (The Idempotency-Key HTTP H
       response_body = Column(Text, nullable=True)
       created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
       updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+      __table_args__ = (
+          UniqueConstraint("tenant_id", "key", name="uq_idempotency_tenant_key"),
+      )
   ```
 
 ### 3.3. RF-03: Normalizador Canônico e Hasher Semântico (SHA-256)

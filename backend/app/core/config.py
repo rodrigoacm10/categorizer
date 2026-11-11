@@ -23,6 +23,11 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
     ]
     
+    # Security & JWT
+    SECRET_KEY: str = "estoque-secret-key-super-secure-production-ready-2026-minimum-32-bytes"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60  # 3600 seconds
+
     # Idempotency window in seconds for deduplication
     IDEMPOTENCY_EXPIRATION_HOURS: int = 24
 
