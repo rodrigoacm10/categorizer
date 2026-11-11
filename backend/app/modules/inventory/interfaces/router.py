@@ -8,8 +8,7 @@ from app.modules.inventory.application.dtos import (
     CreateStockMovementDto, StockMovementResponseDto, MovementTypeEnum
 )
 from app.modules.inventory.application import use_cases
-from app.modules.idempotency.interfaces.guard import check_or_start_idempotency
-from app.modules.idempotency.infrastructure.repositories import IdempotencyRepository
+from app.modules.idempotency.interfaces.guard import IdempotencyGuard
 from app.modules.tenants.interfaces.context import TenantContext, get_tenant_context
 from app.modules.tenants.interfaces.rbac import require_roles
 from app.modules.tenants.domain.entities import TenantRole
@@ -45,12 +44,12 @@ def create_movement_endpoint(
     _check_movement_role_permission(context.role, dto.type)
 
     endpoint = "/api/inventory/movements"
-    key, cached_response = check_or_start_idempotency(
-        db=db,
+    guard = IdempotencyGuard(db, tenant_id=context.tenant.id)
+    key, cached_response = guard.check_or_start(
         endpoint=endpoint,
         payload=dto.model_dump(),
         client_key=x_idempotency_key,
-        tenant_id=context.tenant.id,
+        method="POST",
     )
 
     if cached_response:
@@ -62,19 +61,16 @@ def create_movement_endpoint(
         movement = use_cases.process_stock_movement(
             db, dto, tenant_id=context.tenant.id, idempotency_key=key
         )
-        
-        # Salva o resultado no registro de idempotência
-        IdempotencyRepository(db).resolve(
+        guard.mark_completed(
             key=key,
             response_code=status.HTTP_201_CREATED,
-            response_body=json.dumps(movement.model_dump(), default=str),
-            tenant_id=context.tenant.id,
+            response_body=movement.model_dump(),
         )
         response.headers["X-Cache"] = "MISS"
         response.headers["X-Idempotency-Key"] = key
         return movement
     except Exception as exc:
-        IdempotencyRepository(db).fail(key, str(exc), tenant_id=context.tenant.id)
+        guard.mark_failed(key, str(exc))
         raise exc
 
 
