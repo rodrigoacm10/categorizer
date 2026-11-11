@@ -352,3 +352,75 @@ def test_idempotency_protection_on_ledger(client):
     assert "Chave de Idempotência já utilizada" in res3.json()["detail"]
 
 
+def test_multi_tenant_isolation_ledger(client):
+    """
+    9. Isolamento Multi-Tenant Estrito:
+    Tenant A não pode consultar nem movimentar estoque de produto pertencente ao Tenant B.
+    """
+    # 1. Tenant A
+    t_a = client.post("/api/tenants", json={"name": "Tenant Alfa", "slug": "tenant-alfa"}).json()
+    t_a_id = t_a["id"]
+    p_a = client.post("/api/products", json={"name": "Produto Alfa", "unit": "UN", "initial_quantity": 10}, headers={"X-Tenant-ID": t_a_id}).json()
+    p_a_id = p_a["id"]
+
+    # 2. Tenant B
+    t_b = client.post("/api/tenants", json={"name": "Tenant Beta", "slug": "tenant-beta"}).json()
+    t_b_id = t_b["id"]
+
+    # Tenant B tenta dar entrada em produto do Tenant A -> 404
+    res_cross_in = client.post(
+        "/api/inventory/in",
+        json={"product_id": p_a_id, "quantity": 5},
+        headers={"X-Tenant-ID": t_b_id},
+    )
+    assert res_cross_in.status_code == 404
+
+    # Tenant B tenta consultar movimentações do produto do Tenant A -> 404
+    res_cross_movs = client.get(
+        f"/api/inventory/products/{p_a_id}/movements",
+        headers={"X-Tenant-ID": t_b_id},
+    )
+    assert res_cross_movs.status_code == 404
+
+
+def test_domain_validation_and_exceptions(client):
+    """
+    10. Validações de Domínio e Exceções:
+    - Quantidade <= 0 para IN e OUT
+    - Quantidade < 0 para ADJUSTMENT
+    - Motivo vazio para ADJUSTMENT
+    - Movimentar produto inativo
+    - Produto inexistente
+    """
+    prod = client.post("/api/products", json={"name": "Produto Regras", "unit": "UN", "initial_quantity": 10}).json()
+    prod_id = prod["id"]
+
+    # Quantidade zero para entrada
+    res_zero_in = client.post("/api/inventory/in", json={"product_id": prod_id, "quantity": 0})
+    assert res_zero_in.status_code == 400
+    assert "maior que zero" in res_zero_in.json()["detail"]
+
+    # Quantidade negativa para saída
+    res_neg_out = client.post("/api/inventory/out", json={"product_id": prod_id, "quantity": -5})
+    assert res_neg_out.status_code == 400
+
+    # Quantidade negativa para ajuste
+    res_neg_adj = client.post("/api/inventory/adjustment", json={"product_id": prod_id, "quantity": -1, "reason": "Teste"})
+    assert res_neg_adj.status_code == 400
+
+    # Motivo em branco para ajuste
+    res_empty_reason = client.post("/api/inventory/adjustment", json={"product_id": prod_id, "quantity": 5, "reason": "   "})
+    assert res_empty_reason.status_code == 400
+
+    # Produto inexistente
+    fake_id = str(uuid.uuid4())
+    res_not_found = client.post("/api/inventory/in", json={"product_id": fake_id, "quantity": 5})
+    assert res_not_found.status_code == 404
+
+    # Inativa produto e tenta movimentar
+    client.delete(f"/api/products/{prod_id}?reason=Inativado para teste")
+    res_inactive = client.post("/api/inventory/in", json={"product_id": prod_id, "quantity": 5})
+    assert res_inactive.status_code == 400
+    assert "inativo/removido" in res_inactive.json()["detail"]
+
+
