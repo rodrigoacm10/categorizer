@@ -102,6 +102,51 @@ def auth_headers(default_user, default_tenant):
 
 
 @pytest.fixture
+def sample_category(db_session, default_tenant):
+    category = CategoryModel(
+        name="Categoria Teste Auxiliar",
+        description="Categoria de teste para testes rápidos",
+        color="#3B82F6",
+        tenant_id=default_tenant.id,
+    )
+    db_session.add(category)
+    db_session.commit()
+    db_session.refresh(category)
+    return category
+
+
+@pytest.fixture
+def sample_product(db_session, default_tenant, sample_category):
+    product = ProductModel(
+        tenant_id=default_tenant.id,
+        name="Produto Teste Fixture",
+        description="Produto de teste padrão com estoque inicial",
+        unit="UN",
+        current_quantity=10000,  # 10.0 UN
+        min_stock=2000,          # 2.0 UN
+        is_active=True,
+        categories=[sample_category],
+    )
+    db_session.add(product)
+    db_session.commit()
+    db_session.refresh(product)
+
+    # Registro contábil no Ledger para reconciliação matemática perene
+    movement = StockMovementModel(
+        tenant_id=default_tenant.id,
+        product_id=product.id,
+        type="IN",
+        quantity=10000,
+        balance_after=10000,
+        reason="Estoque inicial de cadastro via fixture",
+    )
+    db_session.add(movement)
+    db_session.commit()
+
+    return product
+
+
+@pytest.fixture
 def client(db_session, auth_headers):
     def override_get_db():
         try:
