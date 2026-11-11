@@ -442,3 +442,148 @@ def test_category_delete_endpoint_and_product_disassociation(client, db_session)
     prod_check = client.get(f"/api/products/{prod_id}").json()
     assert prod_check["name"] == "Produto com Categoria a Deletar"
     assert len(prod_check["categories"]) == 0
+
+
+# -------------------------------------------------------------
+# 4. TESTES DE TRATAMENTO DE ERROS E REPOSITÓRIOS DIRETOS
+# -------------------------------------------------------------
+
+
+def test_duplicate_category_and_product_names_validation(client):
+    # Categoria duplicada com chaves de idempotência distintas
+    c1 = client.post(
+        "/api/categories",
+        json={"name": "Categoria Unica"},
+        headers={"X-Idempotency-Key": str(uuid4())},
+    )
+    assert c1.status_code == 201
+
+    c2 = client.post(
+        "/api/categories",
+        json={"name": "Categoria Unica", "description": "Tentativa com payload diferente"},
+        headers={"X-Idempotency-Key": str(uuid4())},
+    )
+    assert c2.status_code in (400, 409)
+
+    # Produto duplicado com chaves de idempotência distintas
+    p1 = client.post(
+        "/api/products",
+        json={"name": "Produto Unico", "unit": "UN"},
+        headers={"X-Idempotency-Key": str(uuid4())},
+    )
+    assert p1.status_code == 201
+
+    p2 = client.post(
+        "/api/products",
+        json={"name": "Produto Unico", "unit": "UN", "description": "Diferente"},
+        headers={"X-Idempotency-Key": str(uuid4())},
+    )
+    assert p2.status_code in (400, 409)
+
+    # Update para nome já existente em outro produto
+    p3 = client.post(
+        "/api/products",
+        json={"name": "Produto Secundario", "unit": "UN"},
+        headers={"X-Idempotency-Key": str(uuid4())},
+    ).json()
+    p3_update = client.put(
+        f"/api/products/{p3['id']}",
+        json={"name": "Produto Unico"},
+        headers={"X-Idempotency-Key": str(uuid4())},
+    )
+    assert p3_update.status_code in (400, 409)
+
+    # Update com categorias inexistentes
+    fake_cat_id = str(uuid4())
+    p3_cat_update = client.put(
+        f"/api/products/{p3['id']}",
+        json={"category_ids": [fake_cat_id]},
+        headers={"X-Idempotency-Key": str(uuid4())},
+    )
+    assert p3_cat_update.status_code == 404
+
+    # Delete de categoria inexistente
+    del_fake_cat = client.delete(f"/api/categories/{fake_cat_id}")
+    assert del_fake_cat.status_code == 404
+
+
+def test_get_and_update_product_not_found(client):
+    fake_uuid = str(uuid4())
+    res_get = client.get(f"/api/products/{fake_uuid}")
+    assert res_get.status_code == 404
+
+    res_put = client.put(f"/api/products/{fake_uuid}", json={"name": "Inexistente"})
+    assert res_put.status_code == 404
+
+    res_del = client.delete(f"/api/products/{fake_uuid}")
+    assert res_del.status_code == 404
+
+
+def test_soft_delete_already_deleted_product(client):
+    prod = client.post(
+        "/api/products",
+        json={"name": "Item Duplo Delete", "unit": "UN"},
+        headers={"X-Idempotency-Key": str(uuid4())},
+    ).json()
+    prod_id = prod["id"]
+
+    del1 = client.delete(
+        f"/api/products/{prod_id}",
+        headers={"X-Idempotency-Key": str(uuid4())},
+    )
+    assert del1.status_code == 200
+
+    del2 = client.delete(
+        f"/api/products/{prod_id}",
+        headers={"X-Idempotency-Key": str(uuid4())},
+    )
+    assert del2.status_code == 200
+    assert "já se encontra removido" in del2.json()["message"]
+
+
+def test_repositories_direct_methods(db_session, default_tenant):
+    from app.modules.products.infrastructure.repositories import (
+        SQLAlchemyCategoryRepository,
+        SQLAlchemyProductRepository,
+    )
+    from app.modules.products.infrastructure.models import ProductModel, CategoryModel
+
+    t_id = default_tenant.id
+    cat_repo = SQLAlchemyCategoryRepository(db_session)
+    prod_repo = SQLAlchemyProductRepository(db_session)
+
+    # Cria categorias
+    c1 = CategoryModel(tenant_id=t_id, name="Cat Repo 1")
+    c2 = CategoryModel(tenant_id=t_id, name="Cat Repo 2")
+    cat_repo.create(c1)
+    cat_repo.create(c2)
+    db_session.commit()
+
+    assert cat_repo.get_by_name("Cat Repo 1", t_id) is not None
+    assert len(cat_repo.get_by_ids([c1.id, c2.id], t_id)) == 2
+    assert len(cat_repo.list(t_id)) >= 2
+
+    # Cria produto
+    prod = ProductModel(
+        tenant_id=t_id,
+        name="Prod Repo Teste",
+        unit="KG",
+        current_quantity=5000,
+        min_stock=2000,
+        categories=[c1, c2],
+    )
+    prod_repo.create(prod)
+    db_session.commit()
+
+    fetched = prod_repo.get_by_id(prod.id, t_id)
+    assert fetched is not None
+    assert len(fetched.categories) == 2
+
+    # Atualiza produto
+    fetched.name = "Prod Repo Modificado"
+    prod_repo.update(fetched)
+    db_session.commit()
+
+    updated_fetch = prod_repo.get_by_name("Prod Repo Modificado", t_id)
+    assert updated_fetch is not None
+    assert updated_fetch.id == prod.id
