@@ -141,3 +141,7 @@ class SQLAlchemyProductRepository:
 
     def delete(self, product: ProductModel) -> None:
         self.db.flush()
+
+
+ProductRepository = SQLAlchemyProductRepository
+CategoryRepository = SQLAlchemyCategoryRepository
