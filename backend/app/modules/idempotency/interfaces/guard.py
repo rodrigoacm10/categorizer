@@ -1,10 +1,12 @@
 import hashlib
 import json
 from typing import Optional, Tuple
+from uuid import UUID
 from fastapi import Header, HTTPException, status
 from sqlalchemy.orm import Session
 from app.modules.idempotency.infrastructure.repositories import IdempotencyRepository
 from app.modules.idempotency.domain.entities import IdempotencyStatus
+
 
 def compute_request_hash(endpoint: str, payload: dict) -> str:
     """Gera um hash SHA-256 estável do endpoint e payload da requisição."""
@@ -12,14 +14,16 @@ def compute_request_hash(endpoint: str, payload: dict) -> str:
     raw = f"{endpoint}:{serialized}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
+
 def check_or_start_idempotency(
     db: Session,
     endpoint: str,
     payload: dict,
-    client_key: Optional[str] = None
+    client_key: Optional[str] = None,
+    tenant_id: Optional[UUID] = None,
 ) -> Tuple[str, Optional[dict]]:
     """
-    Garante a idempotência pelo Backend:
+    Garante a idempotência pelo Backend com escopo por tenant:
     1. Se client_key foi enviada:
        - Se já existe RESOLVED e o hash bate: retorna (key, resposta_salva)
        - Se já existe RESOLVED mas o hash difere: lança 409 CONFLICT (fraude ou reuso indevido)
@@ -34,7 +38,7 @@ def check_or_start_idempotency(
 
     # 1. Caso com chave explícita
     if client_key:
-        record = repo.get_by_key(client_key)
+        record = repo.get_by_key(client_key, tenant_id=tenant_id)
         if record:
             if record.request_hash != request_hash:
                 raise HTTPException(
@@ -52,13 +56,13 @@ def check_or_start_idempotency(
                     return client_key, json.loads(record.response_body)
                 except Exception:
                     return client_key, {"message": record.response_body}
-        
+
         # Chave nova: registrar como PROCESSING
-        repo.create(client_key, request_hash, endpoint)
+        repo.create(client_key, request_hash, endpoint, tenant_id=tenant_id)
         return client_key, None
 
     # 2. Caso sem chave explícita: Backend faz a proteção semântica (anti-duplo clique)
-    recent = repo.find_recent_by_hash(request_hash, endpoint, max_age_seconds=10)
+    recent = repo.find_recent_by_hash(request_hash, endpoint, max_age_seconds=10, tenant_id=tenant_id)
     if recent and recent.status == IdempotencyStatus.RESOLVED.value and recent.response_body:
         try:
             return recent.key, json.loads(recent.response_body)
@@ -66,8 +70,9 @@ def check_or_start_idempotency(
             return recent.key, {"message": recent.response_body}
 
     backend_key = f"auto-{request_hash[:16]}-{int(datetime_now_timestamp())}"
-    repo.create(backend_key, request_hash, endpoint)
+    repo.create(backend_key, request_hash, endpoint, tenant_id=tenant_id)
     return backend_key, None
+
 
 def datetime_now_timestamp() -> float:
     import time
