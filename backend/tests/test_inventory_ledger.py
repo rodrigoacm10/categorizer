@@ -96,3 +96,37 @@ def test_stock_out_decreases_balance_and_appends_ledger(client):
     assert float(prod_updated["current_quantity"]) == 17.5
 
 
+def test_stock_out_insufficient_stock_rejection(client):
+    """
+    3. RF-04 / Teste Obrigatório 3:
+    Tentar dar saída em quantidade maior do que o saldo atual.
+    Validar lançamento de InsufficientStockError, resposta HTTP 422 e saldo inalterado.
+    """
+    prod = client.post("/api/products", json={
+        "name": "Argamassa ACIII",
+        "unit": "SC",
+        "initial_quantity": 4.0,
+    }).json()
+    prod_id = prod["id"]
+
+    res_fail = client.post("/api/inventory/out", json={
+        "product_id": prod_id,
+        "quantity": 10.0,
+        "reason": "Tentativa de saída excedente",
+    })
+    assert res_fail.status_code == 422
+    err = res_fail.json()
+    assert err["type"] == "https://api.estoque.local/errors/insufficient-stock"
+    assert err["title"] == "Saldo Insuficiente"
+    assert "Saldo insuficiente" in err["detail"]
+
+    # Valida que o saldo físico permaneceu estritamente inalterado
+    prod_check = client.get(f"/api/products/{prod_id}").json()
+    assert float(prod_check["current_quantity"]) == 4.0
+    assert prod_check["current_quantity_scaled"] == 4000
+
+    # Valida que nenhuma saída foi gravada no ledger
+    movs = client.get(f"/api/inventory/products/{prod_id}/movements").json()
+    assert not any(m["type"] == "OUT" for m in movs)
+
+
