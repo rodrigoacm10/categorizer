@@ -228,3 +228,64 @@ def test_ledger_mathematical_reconciliation(client):
     assert sum_deltas_scaled == prod_final["current_quantity_scaled"]
 
 
+def test_pessimistic_lock_concurrency(db_session, default_tenant):
+    """
+    7. Concorrência Pessimista (SELECT ... FOR UPDATE):
+    Simula duas transações concorrentes disputando a mesma linha de produto.
+    Com o bloqueio pessimista, a segunda transação aguarda a primeira e percebe
+    o saldo decrementado, evitando race conditions e saldo negativo.
+    """
+    # 1. Cria produto diretamente no banco com 10 unidades
+    from app.modules.products.infrastructure.models import ProductModel
+    prod = ProductModel(
+        name="Item Concorrente Lock",
+        unit="UN",
+        current_quantity=to_scaled_int(10),
+        tenant_id=default_tenant.id,
+    )
+    db_session.add(prod)
+    db_session.commit()
+    db_session.refresh(prod)
+    prod_id = prod.id
+
+    results = []
+    errors = []
+
+    def withdraw_task(thread_id: int):
+        thread_session = TestingSessionLocal()
+        uow = InventoryUnitOfWork(thread_session)
+        use_case = RegisterStockOutUseCase(uow)
+        try:
+            res = use_case.execute(
+                tenant_id=default_tenant.id,
+                product_id=prod_id,
+                quantity=6,  # Tenta retirar 6 unidades (saldo inicial é 10)
+                reason=f"Saída concorrente thread {thread_id}",
+            )
+            results.append((thread_id, res))
+        except InsufficientStockError as e:
+            errors.append((thread_id, e))
+        finally:
+            thread_session.close()
+
+    t1 = threading.Thread(target=withdraw_task, args=(1,))
+    t2 = threading.Thread(target=withdraw_task, args=(2,))
+
+    t1.start()
+    t2.start()
+
+    t1.join()
+    t2.join()
+
+    # Com 10 unidades iniciais e duas tentativas de retirar 6:
+    # Exatamente UMA thread deve obter sucesso (restando 4 unidades)
+    # E a outra thread DEVE falhar com InsufficientStockError!
+    assert len(results) == 1, f"Apenas uma retirada deveria ter sucesso: {results}"
+    assert len(errors) == 1, f"Uma retirada deveria falhar por saldo insuficiente: {errors}"
+
+    # Valida saldo no banco: 10 - 6 = 4 unidades (4000 escalado)
+    db_session.expire_all()
+    updated_prod = db_session.query(ProductModel).filter(ProductModel.id == prod_id).first()
+    assert updated_prod.current_quantity == 4000
+
+
