@@ -424,3 +424,50 @@ def test_domain_validation_and_exceptions(client):
     assert "inativo/removido" in res_inactive.json()["detail"]
 
 
+def test_product_balance_endpoint(client):
+    """
+    11. Consulta de Saldo de Produto (GetProductBalanceUseCase).
+    """
+    prod = client.post("/api/products", json={
+        "name": "Parafuso Estoque Minimo",
+        "unit": "UN",
+        "initial_quantity": 5,
+        "min_stock": 10,
+    }).json()
+    prod_id = prod["id"]
+
+    res_balance = client.get(f"/api/inventory/products/{prod_id}/balance")
+    assert res_balance.status_code == 200
+    b_data = res_balance.json()
+    assert b_data["product_id"] == prod_id
+    assert float(b_data["current_quantity"]) == 5.0
+    assert b_data["current_quantity_scaled"] == 5000
+    assert b_data["is_low_stock"] is True
+    assert float(b_data["min_stock"]) == 10.0
+
+
+def test_list_movements_filters_and_pagination(client):
+    """
+    12. Filtros e Paginação de Movimentações Contábeis (ListStockMovementsUseCase).
+    """
+    p1 = client.post("/api/products", json={"name": "Filtro Prod 1", "unit": "UN", "initial_quantity": 10}).json()
+    p2 = client.post("/api/products", json={"name": "Filtro Prod 2", "unit": "UN", "initial_quantity": 20}).json()
+
+    client.post("/api/inventory/in", json={"product_id": p1["id"], "quantity": 5})
+    client.post("/api/inventory/out", json={"product_id": p1["id"], "quantity": 2})
+    client.post("/api/inventory/in", json={"product_id": p2["id"], "quantity": 15})
+
+    # Filtro por tipo IN
+    res_in = client.get("/api/inventory/movements?type=IN").json()
+    assert all(m["type"] == "IN" for m in res_in)
+    assert len(res_in) >= 2
+
+    # Filtro por product_id
+    res_p1 = client.get(f"/api/inventory/movements?product_id={p1['id']}").json()
+    assert all(m["product_id"] == p1["id"] for m in res_p1)
+
+    # Paginação
+    res_pag = client.get("/api/inventory/movements?limit=2&offset=0").json()
+    assert len(res_pag) == 2
+
+
