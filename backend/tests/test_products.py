@@ -309,3 +309,136 @@ def test_soft_delete_product_records_ledger_event(client):
     assert deleted_event["reason"] == "Item Obsoleto"
     assert deleted_event["quantity_scaled"] == 0
     assert float(deleted_event["balance_after"]) == 25.0
+
+
+# -------------------------------------------------------------
+# 3. TESTES DE FILTROS, PAGINAÇÃO E ISOLAMENTO MULTI-TENANT
+# -------------------------------------------------------------
+
+
+def test_list_products_search_and_pagination(client):
+    # Cria múltiplos produtos
+    client.post("/api/products", json={"name": "Abraçadeira Nylon 100mm", "description": "Fixação de cabos", "unit": "UN"})
+    client.post("/api/products", json={"name": "Abraçadeira Inox 200mm", "description": "Fixação pesada", "unit": "UN"})
+    client.post("/api/products", json={"name": "Parafuso Brocante", "description": "Auto perfurante", "unit": "UN"})
+
+    # Busca textual case-insensitive por nome
+    res_search1 = client.get("/api/products?search=abraçadeira")
+    assert res_search1.status_code == 200
+    assert len(res_search1.json()) == 2
+
+    # Busca textual por descrição
+    res_search2 = client.get("/api/products?search=perfurante")
+    assert res_search2.status_code == 200
+    assert len(res_search2.json()) == 1
+    assert res_search2.json()[0]["name"] == "Parafuso Brocante"
+
+    # Paginação
+    res_paged1 = client.get("/api/products?limit=2&offset=0")
+    assert res_paged1.status_code == 200
+    assert len(res_paged1.json()) == 2
+
+    res_paged2 = client.get("/api/products?limit=2&offset=2")
+    assert res_paged2.status_code == 200
+    assert len(res_paged2.json()) >= 1
+
+
+def test_list_products_filter_by_category(client):
+    cat_res = client.post("/api/categories", json={"name": "Categoria Exclusiva A"})
+    cat_id = cat_res.json()["id"]
+
+    client.post("/api/products", json={"name": "Produto Na Categoria", "unit": "UN", "category_ids": [cat_id]})
+    client.post("/api/products", json={"name": "Produto Fora da Categoria", "unit": "UN"})
+
+    filter_res = client.get(f"/api/products?category_id={cat_id}")
+    assert filter_res.status_code == 200
+    items = filter_res.json()
+    assert len(items) == 1
+    assert items[0]["name"] == "Produto Na Categoria"
+
+
+def test_products_and_categories_multi_tenant_isolation(client, db_session, default_tenant):
+    """
+    Garante que produtos e categorias do Tenant A são 100% invisíveis e inacessíveis para o Tenant B.
+    """
+    from app.modules.tenants.infrastructure.models import TenantModel, TenantMembershipModel
+    from app.modules.auth.infrastructure.models import UserModel
+    from app.core.security import get_password_hash, create_access_token
+
+    # Cria Tenant B e usuário membro com role OWNER
+    tenant_b = TenantModel(name="Tenant B", slug="tenant-b", is_active=True)
+    db_session.add(tenant_b)
+    db_session.commit()
+
+    user_b = UserModel(email="user.b@empresa.com", password_hash=get_password_hash("Senha123"), full_name="User B")
+    db_session.add(user_b)
+    db_session.commit()
+
+    db_session.add(TenantMembershipModel(user_id=user_b.id, tenant_id=tenant_b.id, role="OWNER"))
+    db_session.commit()
+
+    token_b = create_access_token({"sub": str(user_b.id), "email": user_b.email})
+    headers_b = {"Authorization": f"Bearer {token_b}", "X-Tenant-ID": str(tenant_b.id)}
+
+    # 1. Tenant A cria categoria e produto
+    cat_a = client.post("/api/categories", json={"name": "Ferramentas A"}).json()
+    prod_a = client.post("/api/products", json={
+        "name": "Martelo A",
+        "unit": "UN",
+        "category_ids": [cat_a["id"]]
+    }).json()
+
+    # 2. Tenant B não vê a categoria de A
+    cats_b = client.get("/api/categories", headers=headers_b).json()
+    assert not any(c["id"] == cat_a["id"] for c in cats_b)
+
+    # 3. Tenant B não vê o produto de A
+    prods_b = client.get("/api/products", headers=headers_b).json()
+    assert not any(p["id"] == prod_a["id"] for p in prods_b)
+
+    # 4. Tenant B tentando acessar produto de A diretamente via GET recebe 404
+    get_cross = client.get(f"/api/products/{prod_a['id']}", headers=headers_b)
+    assert get_cross.status_code == 404
+
+    # 5. Tenant B tentando atualizar produto de A recebe 404
+    put_cross = client.put(f"/api/products/{prod_a['id']}", json={"name": "Hack"}, headers=headers_b)
+    assert put_cross.status_code == 404
+
+    # 6. Tenant B tentando deletar produto de A recebe 404
+    del_cross = client.delete(f"/api/products/{prod_a['id']}", headers=headers_b)
+    assert del_cross.status_code == 404
+
+    # 7. Tenant B tentando associar produto à categoria de A recebe 404
+    link_cross = client.post("/api/products", json={
+        "name": "Produto Tentativa Cross",
+        "unit": "UN",
+        "category_ids": [cat_a["id"]]
+    }, headers=headers_b)
+    assert link_cross.status_code in (400, 404)
+
+
+def test_category_delete_endpoint_and_product_disassociation(client, db_session):
+    # 1. Cria categoria e produto associado
+    cat = client.post("/api/categories", json={"name": "Categoria Para Deletar"}).json()
+    cat_id = cat["id"]
+
+    prod = client.post("/api/products", json={
+        "name": "Produto com Categoria a Deletar",
+        "unit": "UN",
+        "category_ids": [cat_id]
+    }).json()
+    prod_id = prod["id"]
+    assert len(prod["categories"]) == 1
+
+    # 2. Deleta categoria via DELETE /api/categories/{id}
+    del_cat_res = client.delete(f"/api/categories/{cat_id}")
+    assert del_cat_res.status_code == 204
+
+    # 3. Categoria não existe mais
+    cats = client.get("/api/categories").json()
+    assert not any(c["id"] == cat_id for c in cats)
+
+    # 4. Produto continua existindo, mas sem a categoria vinculada
+    prod_check = client.get(f"/api/products/{prod_id}").json()
+    assert prod_check["name"] == "Produto com Categoria a Deletar"
+    assert len(prod_check["categories"]) == 0
