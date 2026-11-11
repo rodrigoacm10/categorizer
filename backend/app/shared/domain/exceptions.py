@@ -164,3 +164,34 @@ class SoleOwnerRemovalError(ProblemDetailsException):
             detail=detail,
             instance=instance,
         )
+
+
+class IdempotencyConflictError(ProblemDetailsException):
+    def __init__(
+        self,
+        detail: str = "Chave de Idempotência já utilizada com um payload diferente. Operação bloqueada pelo backend para evitar inconsistência.",
+        instance: Optional[str] = None,
+    ):
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            type_suffix="idempotency-conflict",
+            title="Conflito de Idempotência",
+            detail=detail,
+            instance=instance,
+        )
+
+
+class IdempotencyProcessingError(ProblemDetailsException):
+    def __init__(
+        self,
+        detail: str = "Esta operação já está sendo processada no momento. Aguarde alguns instantes.",
+        instance: Optional[str] = None,
+    ):
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            type_suffix="idempotency-processing",
+            title="Operação em Processamento",
+            detail=detail,
+            instance=instance,
+        )
+
