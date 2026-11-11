@@ -471,3 +471,99 @@ def test_list_movements_filters_and_pagination(client):
     assert len(res_pag) == 2
 
 
+def test_rbac_inventory_permissions(client, default_tenant):
+    """
+    13. RBAC e Matriz de Autorização:
+    - ALMOXARIFE: Pode registrar IN e OUT, mas não ADJUSTMENT sem permissão.
+    - AUDITOR: Pode registrar ADJUSTMENT e listar, mas não IN nem OUT (403).
+    - VIEWER: Não pode registrar nenhuma movimentação (403).
+    """
+    t_id = str(default_tenant.id)
+
+    # Cria usuários com papéis
+    u_almox = client.post("/api/auth/register", json={"email": "almox.inv@empresa.com", "password": "SenhaSegura123", "full_name": "Almoxarife"}).json()
+    u_audit = client.post("/api/auth/register", json={"email": "audit.inv@empresa.com", "password": "SenhaSegura123", "full_name": "Auditor"}).json()
+
+    add_almox = client.post(f"/api/tenants/{t_id}/members", json={"email": "almox.inv@empresa.com", "role": "ALMOXARIFE"})
+    assert add_almox.status_code == 201
+    add_audit = client.post(f"/api/tenants/{t_id}/members", json={"email": "audit.inv@empresa.com", "role": "AUDITOR"})
+    assert add_audit.status_code == 201
+
+    token_almox = create_access_token({"sub": u_almox["id"], "email": u_almox["email"]})
+    token_audit = create_access_token({"sub": u_audit["id"], "email": u_audit["email"]})
+
+    prod = client.post("/api/products", json={"name": "Produto RBAC Inv", "unit": "UN", "initial_quantity": 50}).json()
+    p_id = prod["id"]
+
+    # 1. Almoxarife pode IN e OUT
+    res_almox_in = client.post("/api/inventory/in", json={"product_id": p_id, "quantity": 10}, headers={"Authorization": f"Bearer {token_almox}", "X-Tenant-ID": t_id})
+    assert res_almox_in.status_code == 201
+
+    res_almox_out = client.post("/api/inventory/out", json={"product_id": p_id, "quantity": 5}, headers={"Authorization": f"Bearer {token_almox}", "X-Tenant-ID": t_id})
+    assert res_almox_out.status_code == 201
+
+    # 2. Auditor tenta IN -> Rejeitado 403
+    res_audit_in = client.post("/api/inventory/in", json={"product_id": p_id, "quantity": 10}, headers={"Authorization": f"Bearer {token_audit}", "X-Tenant-ID": t_id})
+    assert res_audit_in.status_code == 403
+    assert res_audit_in.json()["type"] == "https://api.estoque.local/errors/insufficient-permissions"
+
+    # 3. Auditor tenta OUT -> Rejeitado 403
+    res_audit_out = client.post("/api/inventory/out", json={"product_id": p_id, "quantity": 5}, headers={"Authorization": f"Bearer {token_audit}", "X-Tenant-ID": t_id})
+    assert res_audit_out.status_code == 403
+    assert res_audit_out.json()["type"] == "https://api.estoque.local/errors/insufficient-permissions"
+
+    # 4. Auditor pode ADJUSTMENT -> Autorizado 201
+    res_audit_adj = client.post("/api/inventory/adjustment", json={"product_id": p_id, "quantity": 60, "reason": "Auditoria de rotina"}, headers={"Authorization": f"Bearer {token_audit}", "X-Tenant-ID": t_id})
+    assert res_audit_adj.status_code == 201
+
+    # 5. Auditor pode consultar extrato -> 200
+    res_audit_list = client.get("/api/inventory/movements", headers={"Authorization": f"Bearer {token_audit}", "X-Tenant-ID": t_id})
+    assert res_audit_list.status_code == 200
+
+
+def test_unit_of_work_transaction_rollback(db_session, default_tenant):
+    """
+    14. Validação de Atomicidade (Rollback do UoW em Exceção):
+    Garante que se qualquer erro ocorrer no bloco transacional, o saldo e o ledger
+    são revertidos integralmente no PostgreSQL.
+    """
+    from app.modules.products.infrastructure.models import ProductModel
+    prod = ProductModel(
+        name="Item Rollback Test",
+        unit="UN",
+        current_quantity=to_scaled_int(100),
+        tenant_id=default_tenant.id,
+    )
+    db_session.add(prod)
+    db_session.commit()
+    db_session.refresh(prod)
+    prod_id = prod.id
+
+    uow = InventoryUnitOfWork(db_session)
+
+    with pytest.raises(RuntimeError):
+        with uow:
+            p = uow.get_product_for_update(default_tenant.id, prod_id)
+            p.current_quantity = to_scaled_int(200)
+            mov = StockMovementModel(
+                tenant_id=default_tenant.id,
+                product_id=prod_id,
+                type=MovementType.IN.value,
+                quantity=to_scaled_int(100),
+                balance_after=to_scaled_int(200),
+                reason="Lote com erro subsequente",
+            )
+            uow.movements.append(mov)
+            # Simula falha imprevista no meio do fluxo antes do commit
+            raise RuntimeError("Falha forçada no processamento transacional")
+
+    # Verifica que o saldo não foi alterado no banco
+    db_session.expire_all()
+    check_prod = db_session.query(ProductModel).filter(ProductModel.id == prod_id).first()
+    assert check_prod.current_quantity == to_scaled_int(100)
+
+    # Verifica que nenhum movimento foi inserido
+    movs = uow.movements.list_by_product(default_tenant.id, prod_id)
+    assert len(movs) == 0
+
+
