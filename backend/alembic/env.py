@@ -12,6 +12,8 @@ if BASE_DIR not in sys.path:
 
 from app.core.config import settings
 from app.shared.infrastructure.database import Base
+from app.modules.auth.infrastructure.models import UserModel
+from app.modules.tenants.infrastructure.models import TenantModel, TenantMembershipModel
 from app.modules.products.infrastructure.models import (
     ProductModel,
     CategoryModel,
