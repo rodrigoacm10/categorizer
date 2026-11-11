@@ -9,8 +9,7 @@ from app.modules.products.application.dtos import (
     CategoryCreateDto, CategoryResponseDto
 )
 from app.modules.products.application import use_cases
-from app.modules.idempotency.interfaces.guard import check_or_start_idempotency
-from app.modules.idempotency.infrastructure.repositories import IdempotencyRepository
+from app.modules.idempotency.interfaces.guard import IdempotencyGuard
 from app.modules.tenants.interfaces.context import TenantContext, get_tenant_context
 from app.modules.tenants.interfaces.rbac import require_roles
 from app.modules.tenants.domain.entities import TenantRole
@@ -22,10 +21,37 @@ router = APIRouter()
 @router.post("/categories", response_model=CategoryResponseDto, status_code=status.HTTP_201_CREATED)
 def create_category_endpoint(
     dto: CategoryCreateDto,
+    response: Response,
     context: TenantContext = Depends(require_roles(TenantRole.OWNER, TenantRole.GESTOR)),
+    x_idempotency_key: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
-    return use_cases.create_category(db, dto, tenant_id=context.tenant.id)
+    endpoint = "/api/categories"
+    guard = IdempotencyGuard(db, tenant_id=context.tenant.id)
+    key, cached = guard.check_or_start(
+        endpoint=endpoint,
+        payload=dto.model_dump(),
+        client_key=x_idempotency_key,
+        method="POST",
+    )
+    if cached:
+        response.headers["X-Cache"] = "HIT"
+        response.headers["X-Idempotency-Key"] = key
+        return cached
+
+    try:
+        created = use_cases.create_category(db, dto, tenant_id=context.tenant.id)
+        guard.mark_completed(
+            key=key,
+            response_code=status.HTTP_201_CREATED,
+            response_body=created.model_dump(),
+        )
+        response.headers["X-Cache"] = "MISS"
+        response.headers["X-Idempotency-Key"] = key
+        return created
+    except Exception as exc:
+        guard.mark_failed(key, str(exc))
+        raise exc
 
 
 @router.get("/categories", response_model=List[CategoryResponseDto])
@@ -46,12 +72,12 @@ def create_product_endpoint(
     db: Session = Depends(get_db)
 ):
     endpoint = "/api/products"
-    key, cached_response = check_or_start_idempotency(
-        db=db,
+    guard = IdempotencyGuard(db, tenant_id=context.tenant.id)
+    key, cached_response = guard.check_or_start(
         endpoint=endpoint,
         payload=dto.model_dump(),
         client_key=x_idempotency_key,
-        tenant_id=context.tenant.id,
+        method="POST",
     )
 
     if cached_response:
@@ -63,18 +89,16 @@ def create_product_endpoint(
         created = use_cases.create_product(
             db, dto, tenant_id=context.tenant.id, idempotency_key=key
         )
-        # Salva o resultado no registro de idempotência
-        IdempotencyRepository(db).resolve(
+        guard.mark_completed(
             key=key,
             response_code=status.HTTP_201_CREATED,
-            response_body=json.dumps(created.model_dump(), default=str),
-            tenant_id=context.tenant.id,
+            response_body=created.model_dump(),
         )
         response.headers["X-Cache"] = "MISS"
         response.headers["X-Idempotency-Key"] = key
         return created
     except Exception as exc:
-        IdempotencyRepository(db).fail(key, str(exc), tenant_id=context.tenant.id)
+        guard.mark_failed(key, str(exc))
         raise exc
 
 
@@ -108,10 +132,37 @@ def get_product_endpoint(
 def update_product_endpoint(
     product_id: str,
     dto: ProductUpdateDto,
+    response: Response,
     context: TenantContext = Depends(require_roles(TenantRole.OWNER, TenantRole.GESTOR)),
+    x_idempotency_key: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
-    return use_cases.update_product(db, product_id, dto, tenant_id=context.tenant.id)
+    endpoint = f"/api/products/{product_id}"
+    guard = IdempotencyGuard(db, tenant_id=context.tenant.id)
+    key, cached = guard.check_or_start(
+        endpoint=endpoint,
+        payload=dto.model_dump(),
+        client_key=x_idempotency_key,
+        method="PUT",
+    )
+    if cached:
+        response.headers["X-Cache"] = "HIT"
+        response.headers["X-Idempotency-Key"] = key
+        return cached
+
+    try:
+        updated = use_cases.update_product(db, product_id, dto, tenant_id=context.tenant.id)
+        guard.mark_completed(
+            key=key,
+            response_code=status.HTTP_200_OK,
+            response_body=updated.model_dump(),
+        )
+        response.headers["X-Cache"] = "MISS"
+        response.headers["X-Idempotency-Key"] = key
+        return updated
+    except Exception as exc:
+        guard.mark_failed(key, str(exc))
+        raise exc
 
 
 @router.delete("/products/{product_id}")
@@ -124,25 +175,31 @@ def delete_product_endpoint(
     db: Session = Depends(get_db)
 ):
     endpoint = f"/api/products/{product_id}:delete"
-    key, cached = check_or_start_idempotency(
-        db=db,
+    guard = IdempotencyGuard(db, tenant_id=context.tenant.id)
+    key, cached = guard.check_or_start(
         endpoint=endpoint,
         payload={"product_id": product_id, "reason": reason},
         client_key=x_idempotency_key,
-        tenant_id=context.tenant.id,
+        method="DELETE",
     )
     if cached:
         response.headers["X-Cache"] = "HIT"
+        response.headers["X-Idempotency-Key"] = key
         return cached
 
     try:
         res = use_cases.delete_product(
             db, product_id, tenant_id=context.tenant.id, reason=reason, idempotency_key=key
         )
-        IdempotencyRepository(db).resolve(
-            key, 200, json.dumps(res), tenant_id=context.tenant.id
+        guard.mark_completed(
+            key=key,
+            response_code=status.HTTP_200_OK,
+            response_body=res,
         )
+        response.headers["X-Cache"] = "MISS"
+        response.headers["X-Idempotency-Key"] = key
         return res
     except Exception as exc:
-        IdempotencyRepository(db).fail(key, str(exc), tenant_id=context.tenant.id)
+        guard.mark_failed(key, str(exc))
         raise exc
+
