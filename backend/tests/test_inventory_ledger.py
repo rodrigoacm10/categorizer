@@ -175,3 +175,56 @@ def test_stock_adjustment_positive_and_negative_delta(client):
     assert float(prod_check["current_quantity"]) == 15.0
 
 
+def test_ledger_immutability_no_delete_no_update(db_session, default_tenant):
+    """
+    5. RF-02 / Teste Obrigatório 5:
+    Garantir que o repositório não expõe métodos mutatórios (update/delete disparam exceção)
+    e que a tabela stock_movements é estritamente append-only.
+    """
+    repo = StockMovementRepository(db_session)
+
+    with pytest.raises(NotImplementedError) as exc_update:
+        repo.update()
+    assert "UPDATE" in str(exc_update.value)
+
+    with pytest.raises(NotImplementedError) as exc_delete:
+        repo.delete()
+    assert "DELETE" in str(exc_delete.value)
+
+
+def test_ledger_mathematical_reconciliation(client):
+    """
+    6. RF-02 / Teste Obrigatório 6:
+    Reconciliação Matemática: Para qualquer sequência de movimentações contábeis,
+    a soma de todos os deltas (sum(quantity_i)) deve ser rigorosamente igual a Product.current_quantity.
+    """
+    prod = client.post("/api/products", json={
+        "name": "Cabo Flexível 2.5mm",
+        "unit": "M",
+        "initial_quantity": 0.0,
+    }).json()
+    prod_id = prod["id"]
+
+    # Sequência diversa de operações
+    client.post("/api/inventory/in", json={"product_id": prod_id, "quantity": 100.0, "reason": "Lote 1"})
+    client.post("/api/inventory/out", json={"product_id": prod_id, "quantity": 35.5, "reason": "Instalação"})
+    client.post("/api/inventory/in", json={"product_id": prod_id, "quantity": 50.25, "reason": "Lote 2"})
+    client.post("/api/inventory/adjustment", json={"product_id": prod_id, "quantity": 80.0, "reason": "Ajuste balanço"})
+    client.post("/api/inventory/out", json={"product_id": prod_id, "quantity": 12.0, "reason": "Venda"})
+    client.post("/api/inventory/in", json={"product_id": prod_id, "quantity": 5.75, "reason": "Devolução"})
+
+    # Saldo final esperado: 80.0 - 12.0 + 5.75 = 73.75
+    prod_final = client.get(f"/api/products/{prod_id}").json()
+    expected_balance_scaled = 73750
+    assert prod_final["current_quantity_scaled"] == expected_balance_scaled
+    assert float(prod_final["current_quantity"]) == 73.75
+
+    # Consulta todos os movimentos gravados no Ledger
+    movs = client.get(f"/api/inventory/products/{prod_id}/movements?limit=100").json()
+    sum_deltas_scaled = sum(m["quantity_scaled"] for m in movs)
+
+    # Reconciliação contábil exata
+    assert sum_deltas_scaled == expected_balance_scaled
+    assert sum_deltas_scaled == prod_final["current_quantity_scaled"]
+
+
