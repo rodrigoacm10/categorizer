@@ -4,3 +4,5 @@ export * from "./SearchInput";
 export * from "./Badge";
 export * from "./Table";
 export * from "./Card";
+export * from "./Can";
+export * from "./Providers";
