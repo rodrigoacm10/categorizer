@@ -1,235 +1,367 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-from typing import List, Optional
+from typing import List, Optional, Union
 from uuid import UUID
 from datetime import datetime, timezone
-from app.modules.products.infrastructure.models import Product, Category
-from app.modules.inventory.infrastructure.models import StockMovement
-from app.modules.products.application.dtos import (
-    ProductCreateDto,
-    ProductUpdateDto,
-    ProductResponseDto,
-    CategoryCreateDto,
-    CategoryResponseDto,
+
+from app.modules.products.infrastructure.models import ProductModel, CategoryModel
+from app.modules.inventory.infrastructure.models import StockMovementModel
+from app.modules.products.infrastructure.repositories import (
+    SQLAlchemyProductRepository,
+    SQLAlchemyCategoryRepository,
 )
-from app.shared.utils.scale import to_scaled_int
+from app.modules.products.application.dtos import (
+    ProductCreateDTO,
+    ProductUpdateDTO,
+    ProductResponseDTO,
+    CategoryCreateDTO,
+    CategoryResponseDTO,
+)
+from app.shared.domain.exceptions import (
+    ProductNotFoundError,
+    CategoryNotFoundError,
+    ProductAlreadyExistsError,
+    CategoryAlreadyExistsError,
+)
 
 
-def create_category(db: Session, dto: CategoryCreateDto, tenant_id: UUID) -> CategoryResponseDto:
-    existing = (
-        db.query(Category)
-        .filter(Category.tenant_id == tenant_id, Category.name.ilike(dto.name.strip()))
-        .first()
-    )
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Categoria '{dto.name}' já cadastrada no tenant.",
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class CreateCategoryUseCase:
+    def __init__(self, db: Session):
+        self.db = db
+        self.repo = SQLAlchemyCategoryRepository(db)
+
+    def execute(self, dto: CategoryCreateDTO, tenant_id: UUID) -> CategoryResponseDTO:
+        clean_name = dto.name.strip()
+        existing = self.repo.get_by_name(clean_name, tenant_id)
+        if existing:
+            raise CategoryAlreadyExistsError(
+                detail=f"Categoria '{dto.name}' já cadastrada no tenant."
+            )
+
+        cat = CategoryModel(
+            tenant_id=tenant_id,
+            name=clean_name,
+            description=dto.description,
+            color=dto.color or "#3B82F6",
         )
-    cat = Category(
-        tenant_id=tenant_id,
-        name=dto.name.strip(),
-        description=dto.description,
-        color=dto.color or "#3B82F6",
-    )
-    db.add(cat)
-    db.commit()
-    db.refresh(cat)
-    return CategoryResponseDto.model_validate(cat)
+        self.repo.create(cat)
+        self.db.commit()
+        self.db.refresh(cat)
+        return CategoryResponseDTO.model_validate(cat)
 
 
-def list_categories(db: Session, tenant_id: UUID) -> List[CategoryResponseDto]:
-    cats = (
-        db.query(Category)
-        .filter(Category.tenant_id == tenant_id)
-        .order_by(Category.name.asc())
-        .all()
-    )
-    return [CategoryResponseDto.model_validate(c) for c in cats]
+class ListCategoriesUseCase:
+    def __init__(self, db: Session):
+        self.db = db
+        self.repo = SQLAlchemyCategoryRepository(db)
+
+    def execute(self, tenant_id: UUID) -> List[CategoryResponseDTO]:
+        categories = self.repo.list(tenant_id)
+        return [CategoryResponseDTO.model_validate(c) for c in categories]
+
+
+class DeleteCategoryUseCase:
+    def __init__(self, db: Session):
+        self.db = db
+        self.repo = SQLAlchemyCategoryRepository(db)
+
+    def execute(self, category_id: Union[UUID, str], tenant_id: UUID) -> None:
+        cat = self.repo.get_by_id(category_id, tenant_id)
+        if not cat:
+            raise CategoryNotFoundError(detail="Categoria não encontrada.")
+
+        self.repo.delete(cat)
+        self.db.commit()
+
+
+class CreateProductUseCase:
+    def __init__(self, db: Session):
+        self.db = db
+        self.product_repo = SQLAlchemyProductRepository(db)
+        self.category_repo = SQLAlchemyCategoryRepository(db)
+
+    def execute(
+        self,
+        dto: ProductCreateDTO,
+        tenant_id: UUID,
+        idempotency_key: Optional[str] = None,
+    ) -> ProductResponseDTO:
+        clean_name = dto.name.strip()
+        existing = self.product_repo.get_by_name(clean_name, tenant_id, is_active=True)
+        if existing:
+            raise ProductAlreadyExistsError(
+                detail=f"Já existe um produto ativo com o nome '{dto.name}' neste tenant."
+            )
+
+        categories = []
+        if dto.category_ids:
+            categories = self.category_repo.get_by_ids(dto.category_ids, tenant_id)
+            if len(categories) != len(set(dto.category_ids)):
+                found_ids = {str(c.id) for c in categories}
+                missing = [cid for cid in dto.category_ids if str(cid) not in found_ids]
+                raise CategoryNotFoundError(
+                    detail=f"Categorias com IDs {missing} não foram encontradas no tenant."
+                )
+
+        initial_qty_scaled = dto.initial_quantity_raw
+        min_stock_scaled = dto.min_stock_raw
+
+        product = ProductModel(
+            tenant_id=tenant_id,
+            name=clean_name,
+            description=dto.description,
+            unit=dto.unit.strip().upper(),
+            current_quantity=initial_qty_scaled,
+            min_stock=min_stock_scaled,
+            is_active=True,
+            categories=categories,
+        )
+        self.product_repo.create(product)
+        self.db.flush()
+
+        if initial_qty_scaled > 0:
+            movement = StockMovementModel(
+                tenant_id=tenant_id,
+                product_id=product.id,
+                type="IN",
+                quantity=initial_qty_scaled,
+                balance_after=initial_qty_scaled,
+                reason="Estoque inicial de cadastro",
+                idempotency_key=idempotency_key,
+            )
+            self.db.add(movement)
+
+        self.db.commit()
+        self.db.refresh(product)
+        return ProductResponseDTO.from_orm_model(product)
+
+
+class ListProductsUseCase:
+    def __init__(self, db: Session):
+        self.db = db
+        self.product_repo = SQLAlchemyProductRepository(db)
+
+    def execute(
+        self,
+        tenant_id: UUID,
+        category_id: Optional[Union[UUID, str, List[Union[UUID, str]]]] = None,
+        low_stock_only: bool = False,
+        search: Optional[str] = None,
+        include_inactive: bool = False,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> List[ProductResponseDTO]:
+        products = self.product_repo.list(
+            tenant_id=tenant_id,
+            category_id=category_id,
+            low_stock_only=low_stock_only,
+            search=search,
+            include_inactive=include_inactive,
+            limit=limit,
+            offset=offset,
+        )
+        return [ProductResponseDTO.from_orm_model(p) for p in products]
+
+
+class GetProductByIdUseCase:
+    def __init__(self, db: Session):
+        self.db = db
+        self.product_repo = SQLAlchemyProductRepository(db)
+
+    def execute(
+        self,
+        product_id: Union[UUID, str],
+        tenant_id: UUID,
+        include_inactive: bool = False,
+    ) -> ProductResponseDTO:
+        product = self.product_repo.get_by_id(
+            product_id=product_id,
+            tenant_id=tenant_id,
+            include_inactive=include_inactive,
+        )
+        if not product:
+            raise ProductNotFoundError(detail="Produto não encontrado.")
+        return ProductResponseDTO.from_orm_model(product)
+
+
+class UpdateProductUseCase:
+    def __init__(self, db: Session):
+        self.db = db
+        self.product_repo = SQLAlchemyProductRepository(db)
+        self.category_repo = SQLAlchemyCategoryRepository(db)
+
+    def execute(
+        self,
+        product_id: Union[UUID, str],
+        dto: ProductUpdateDTO,
+        tenant_id: UUID,
+    ) -> ProductResponseDTO:
+        product = self.product_repo.get_by_id(
+            product_id=product_id,
+            tenant_id=tenant_id,
+            include_inactive=True,
+        )
+        if not product:
+            raise ProductNotFoundError(detail="Produto não encontrado.")
+
+        if dto.name is not None:
+            clean_name = dto.name.strip()
+            existing = self.product_repo.get_by_name(clean_name, tenant_id, is_active=True)
+            if existing and existing.id != product.id:
+                raise ProductAlreadyExistsError(
+                    detail=f"Já existe outro produto ativo com o nome '{clean_name}' neste tenant."
+                )
+            product.name = clean_name
+
+        if dto.description is not None:
+            product.description = dto.description
+
+        if dto.unit is not None:
+            product.unit = dto.unit.strip().upper()
+
+        if dto.min_stock is not None:
+            product.min_stock = dto.min_stock_raw
+
+        if dto.category_ids is not None:
+            categories = self.category_repo.get_by_ids(dto.category_ids, tenant_id)
+            if len(categories) != len(set(dto.category_ids)):
+                found_ids = {str(c.id) for c in categories}
+                missing = [cid for cid in dto.category_ids if str(cid) not in found_ids]
+                raise CategoryNotFoundError(
+                    detail=f"Categorias com IDs {missing} não foram encontradas no tenant."
+                )
+            product.categories = categories
+
+        # REGRA INEGOCIÁVEL: current_quantity NÃO é alterado aqui!
+        product.updated_at = utc_now()
+        self.db.commit()
+        self.db.refresh(product)
+        return ProductResponseDTO.from_orm_model(product)
+
+
+class SoftDeleteProductUseCase:
+    def __init__(self, db: Session):
+        self.db = db
+        self.product_repo = SQLAlchemyProductRepository(db)
+
+    def execute(
+        self,
+        product_id: Union[UUID, str],
+        tenant_id: UUID,
+        reason: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> dict:
+        product = self.product_repo.get_by_id(
+            product_id=product_id,
+            tenant_id=tenant_id,
+            include_inactive=True,
+        )
+        if not product:
+            raise ProductNotFoundError(detail="Produto não encontrado.")
+
+        if not product.is_active:
+            return {
+                "message": "Produto já se encontra removido.",
+                "product_id": str(product.id),
+                "remaining_quantity_scaled": product.current_quantity,
+            }
+
+        # Registra evento imutável no Ledger
+        movement = StockMovementModel(
+            tenant_id=tenant_id,
+            product_id=product.id,
+            type="PRODUCT_DELETED",
+            quantity=0,
+            balance_after=product.current_quantity,
+            reason=reason or "Produto removido do catálogo ativo",
+            idempotency_key=idempotency_key,
+        )
+        self.db.add(movement)
+
+        # Marca soft-delete
+        product.is_active = False
+        product.deleted_at = utc_now()
+        product.updated_at = utc_now()
+
+        self.db.commit()
+        return {
+            "message": f"Produto '{product.name}' removido com sucesso. Histórico de auditoria preservado.",
+            "product_id": str(product.id),
+            "remaining_quantity_scaled": product.current_quantity,
+        }
+
+
+# Procedural convenience wrappers for backwards compatibility
+def create_category(db: Session, dto: CategoryCreateDTO, tenant_id: UUID) -> CategoryResponseDTO:
+    return CreateCategoryUseCase(db).execute(dto, tenant_id)
+
+
+def list_categories(db: Session, tenant_id: UUID) -> List[CategoryResponseDTO]:
+    return ListCategoriesUseCase(db).execute(tenant_id)
+
+
+def delete_category(db: Session, category_id: Union[UUID, str], tenant_id: UUID) -> None:
+    return DeleteCategoryUseCase(db).execute(category_id, tenant_id)
 
 
 def create_product(
     db: Session,
-    dto: ProductCreateDto,
+    dto: ProductCreateDTO,
     tenant_id: UUID,
     idempotency_key: Optional[str] = None,
-) -> ProductResponseDto:
-    # Verifica duplicidade de nome em produtos ativos no mesmo tenant
-    existing = (
-        db.query(Product)
-        .filter(
-            Product.tenant_id == tenant_id,
-            Product.name.ilike(dto.name.strip()),
-            Product.is_active == True,
-        )
-        .first()
-    )
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Já existe um produto ativo com o nome '{dto.name}' neste tenant.",
-        )
-
-    # Resolve categorias isoladas pelo tenant
-    categories = []
-    if dto.category_ids:
-        categories = (
-            db.query(Category)
-            .filter(Category.tenant_id == tenant_id, Category.id.in_(dto.category_ids))
-            .all()
-        )
-
-    scaled_initial_qty = to_scaled_int(dto.initial_quantity or 0)
-    scaled_min_stock = to_scaled_int(dto.min_stock) if dto.min_stock is not None else None
-
-    product = Product(
-        tenant_id=tenant_id,
-        name=dto.name.strip(),
-        description=dto.description,
-        unit=dto.unit.strip().upper(),
-        current_quantity=scaled_initial_qty,
-        min_stock=scaled_min_stock,
-        is_active=True,
-        categories=categories,
-    )
-    db.add(product)
-    db.flush()
-
-    # Se informou quantidade inicial > 0, cria o primeiro registro no Ledger com tenant_id
-    if scaled_initial_qty > 0:
-        movement = StockMovement(
-            tenant_id=tenant_id,
-            product_id=product.id,
-            type="IN",
-            quantity=scaled_initial_qty,
-            balance_after=scaled_initial_qty,
-            reason="Estoque inicial de cadastro",
-            idempotency_key=idempotency_key,
-        )
-        db.add(movement)
-
-    db.commit()
-    db.refresh(product)
-    return ProductResponseDto.from_orm_model(product)
+) -> ProductResponseDTO:
+    return CreateProductUseCase(db).execute(dto, tenant_id, idempotency_key=idempotency_key)
 
 
 def list_products(
     db: Session,
     tenant_id: UUID,
-    category_ids: Optional[List[str]] = None,
+    category_ids: Optional[Union[UUID, str, List[Union[UUID, str]]]] = None,
+    category_id: Optional[Union[UUID, str, List[Union[UUID, str]]]] = None,
+    low_stock_only: bool = False,
     search: Optional[str] = None,
     include_inactive: bool = False,
-) -> List[ProductResponseDto]:
-    query = db.query(Product).filter(Product.tenant_id == tenant_id)
-
-    if not include_inactive:
-        query = query.filter(Product.is_active == True)
-
-    if search:
-        search_filter = f"%{search.strip()}%"
-        query = query.filter(
-            (Product.name.ilike(search_filter)) | (Product.description.ilike(search_filter))
-        )
-
-    if category_ids:
-        query = query.join(Product.categories).filter(Category.id.in_(category_ids)).distinct()
-
-    products = query.order_by(Product.name.asc()).all()
-    return [ProductResponseDto.from_orm_model(p) for p in products]
-
-
-def get_product_by_id(db: Session, product_id: str, tenant_id: UUID) -> ProductResponseDto:
-    product = (
-        db.query(Product)
-        .filter(Product.id == product_id, Product.tenant_id == tenant_id)
-        .first()
+    limit: int = 50,
+    offset: int = 0,
+) -> List[ProductResponseDTO]:
+    cat_filter = category_id if category_id is not None else category_ids
+    return ListProductsUseCase(db).execute(
+        tenant_id=tenant_id,
+        category_id=cat_filter,
+        low_stock_only=low_stock_only,
+        search=search,
+        include_inactive=include_inactive,
+        limit=limit,
+        offset=offset,
     )
-    if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Produto não encontrado.",
-        )
-    return ProductResponseDto.from_orm_model(product)
+
+
+def get_product_by_id(
+    db: Session, product_id: Union[UUID, str], tenant_id: UUID, include_inactive: bool = False
+) -> ProductResponseDTO:
+    return GetProductByIdUseCase(db).execute(product_id, tenant_id, include_inactive=include_inactive)
 
 
 def update_product(
     db: Session,
-    product_id: str,
-    dto: ProductUpdateDto,
+    product_id: Union[UUID, str],
+    dto: ProductUpdateDTO,
     tenant_id: UUID,
-) -> ProductResponseDto:
-    product = (
-        db.query(Product)
-        .filter(Product.id == product_id, Product.tenant_id == tenant_id)
-        .first()
-    )
-    if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Produto não encontrado.",
-        )
-
-    if dto.name is not None:
-        product.name = dto.name.strip()
-    if dto.description is not None:
-        product.description = dto.description
-    if dto.unit is not None:
-        product.unit = dto.unit.strip().upper()
-    if dto.min_stock is not None:
-        product.min_stock = to_scaled_int(dto.min_stock)
-    if dto.category_ids is not None:
-        categories = (
-            db.query(Category)
-            .filter(Category.tenant_id == tenant_id, Category.id.in_(dto.category_ids))
-            .all()
-        )
-        product.categories = categories
-
-    db.commit()
-    db.refresh(product)
-    return ProductResponseDto.from_orm_model(product)
+) -> ProductResponseDTO:
+    return UpdateProductUseCase(db).execute(product_id, dto, tenant_id)
 
 
 def delete_product(
     db: Session,
-    product_id: str,
+    product_id: Union[UUID, str],
     tenant_id: UUID,
     reason: Optional[str] = None,
     idempotency_key: Optional[str] = None,
 ) -> dict:
-    product = (
-        db.query(Product)
-        .filter(Product.id == product_id, Product.tenant_id == tenant_id)
-        .first()
+    return SoftDeleteProductUseCase(db).execute(
+        product_id, tenant_id, reason=reason, idempotency_key=idempotency_key
     )
-    if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Produto não encontrado.",
-        )
-
-    if not product.is_active:
-        return {"message": "Produto já se encontra removido.", "product_id": product_id}
-
-    # Registra no Ledger a exclusão com tenant_id
-    movement = StockMovement(
-        tenant_id=tenant_id,
-        product_id=product.id,
-        type="PRODUCT_DELETED",
-        quantity=0,
-        balance_after=product.current_quantity,
-        reason=reason or "Produto removido do catálogo ativo",
-        idempotency_key=idempotency_key,
-    )
-    db.add(movement)
-
-    # Marca soft-delete
-    product.is_active = False
-    product.deleted_at = datetime.now(timezone.utc)
-
-    db.commit()
-    return {
-        "message": f"Produto '{product.name}' removido com sucesso. Histórico de auditoria preservado.",
-        "product_id": str(product.id),
-        "remaining_quantity_scaled": product.current_quantity,
-    }

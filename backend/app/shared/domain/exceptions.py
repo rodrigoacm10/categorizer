@@ -195,3 +195,48 @@ class IdempotencyProcessingError(ProblemDetailsException):
             instance=instance,
         )
 
+
+class ProductNotFoundError(ProblemDetailsException):
+    def __init__(self, detail: str = "Produto não encontrado.", instance: Optional[str] = None):
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            type_suffix="product-not-found",
+            title="Produto Não Encontrado",
+            detail=detail,
+            instance=instance,
+        )
+
+
+class CategoryNotFoundError(ProblemDetailsException):
+    def __init__(self, detail: str = "Categoria não encontrada.", instance: Optional[str] = None):
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            type_suffix="category-not-found",
+            title="Categoria Não Encontrada",
+            detail=detail,
+            instance=instance,
+        )
+
+
+class ProductAlreadyExistsError(ProblemDetailsException):
+    def __init__(self, detail: str = "Já existe um produto com este nome neste tenant.", instance: Optional[str] = None):
+        super().__init__(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            type_suffix="product-already-exists",
+            title="Produto Já Cadastrado",
+            detail=detail,
+            instance=instance,
+        )
+
+
+class CategoryAlreadyExistsError(ProblemDetailsException):
+    def __init__(self, detail: str = "Categoria já cadastrada no tenant.", instance: Optional[str] = None):
+        super().__init__(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            type_suffix="category-already-exists",
+            title="Categoria Já Cadastrada",
+            detail=detail,
+            instance=instance,
+        )
+
+
