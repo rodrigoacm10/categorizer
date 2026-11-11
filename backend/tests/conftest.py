@@ -149,11 +149,10 @@ def sample_product(db_session, default_tenant, sample_category):
 @pytest.fixture
 def client(db_session, auth_headers):
     def override_get_db():
-        db = TestingSessionLocal()
         try:
-            yield db
+            yield db_session
         finally:
-            db.close()
+            pass
 
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app, headers=auth_headers) as c:

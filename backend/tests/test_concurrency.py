@@ -8,9 +8,31 @@ from app.modules.inventory.application.use_cases import RegisterStockOutUseCase
 from app.modules.inventory.domain.exceptions import InsufficientStockError
 from app.shared.utils.scale import to_scaled_int
 from tests.conftest import TestingSessionLocal
+from app.main import app
+from app.shared.infrastructure.database import get_db
+from fastapi.testclient import TestClient
 
 
-def test_concurrent_stock_out_race_condition(client, auth_headers):
+@pytest.fixture
+def concurrent_client(auth_headers):
+    """
+    Client dedicado para testes de concorrência onde cada requisição
+    recebe uma sessão/conexão isolada do pool PostgreSQL.
+    """
+    def override_get_db_concurrent():
+        db = TestingSessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db_concurrent
+    with TestClient(app, headers=auth_headers) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+def test_concurrent_stock_out_race_condition(concurrent_client, auth_headers):
     """
     RF-02: Teste de Carga e Concorrência (Race Conditions).
     Cenário de Teste de Ruptura Concorrente:
@@ -25,7 +47,7 @@ def test_concurrent_stock_out_race_condition(client, auth_headers):
        - O Livro-Razão (stock_movements) deve conter exatamente 5 registros de saída de -1000.
     """
     # 1. Cadastra produto com saldo inicial de 5 unidades (5000 escalado)
-    prod_res = client.post(
+    prod_res = concurrent_client.post(
         "/api/products",
         json={
             "name": "Viga Metálica W200 Concorrente",
@@ -44,17 +66,15 @@ def test_concurrent_stock_out_race_condition(client, auth_headers):
     # 2 e 3. Disputa concorrente de 10 threads por 1 unidade cada
     def attempt_withdrawal(thread_idx: int):
         idempotency_key = str(uuid.uuid4())
-        res = client.post(
+        thread_client = TestClient(app, headers=auth_headers)
+        res = thread_client.post(
             "/api/inventory/out",
             json={
                 "product_id": prod_id,
                 "quantity": 1.0,
                 "reason": f"Disputa concorrente thread #{thread_idx}",
             },
-            headers={
-                **auth_headers,
-                "X-Idempotency-Key": idempotency_key,
-            },
+            headers={"X-Idempotency-Key": idempotency_key},
         )
         return res.status_code, res.json()
 
@@ -77,14 +97,14 @@ def test_concurrent_stock_out_race_condition(client, auth_headers):
     )
 
     # 4.1 Validação de saldo final estritamente igual a ZERO (nunca negativo)
-    prod_final_res = client.get(f"/api/products/{prod_id}")
+    prod_final_res = concurrent_client.get(f"/api/products/{prod_id}")
     assert prod_final_res.status_code == 200
     prod_final = prod_final_res.json()
     assert prod_final["current_quantity_scaled"] == 0, "O saldo escalado deve ser exatamente 0"
     assert float(prod_final["current_quantity"]) == 0.0, "O saldo decimal deve ser exatamente 0.0"
 
     # 4.2 Validação do Livro-Razão (Ledger imutável)
-    movs_res = client.get(f"/api/inventory/products/{prod_id}/movements?limit=100")
+    movs_res = concurrent_client.get(f"/api/inventory/products/{prod_id}/movements?limit=100")
     assert movs_res.status_code == 200
     movs = movs_res.json()
 
@@ -108,12 +128,12 @@ def test_concurrent_stock_out_race_condition(client, auth_headers):
     assert sum_deltas == prod_final["current_quantity_scaled"]
 
 
-def test_concurrent_stock_out_at_zero_balance_never_goes_negative(client, auth_headers):
+def test_concurrent_stock_out_at_zero_balance_never_goes_negative(concurrent_client, auth_headers):
     """
     Garante que 10 threads disparadas contra um produto com saldo ZERO
     são 100% rejeitadas com 422 e nenhum registro de OUT é gerado.
     """
-    prod_res = client.post(
+    prod_res = concurrent_client.post(
         "/api/products",
         json={
             "name": "Parafuso Esgotado Concorrente",
@@ -125,17 +145,15 @@ def test_concurrent_stock_out_at_zero_balance_never_goes_negative(client, auth_h
     prod_id = prod_res.json()["id"]
 
     def attempt_empty_withdrawal(idx: int):
-        res = client.post(
+        thread_client = TestClient(app, headers=auth_headers)
+        res = thread_client.post(
             "/api/inventory/out",
             json={
                 "product_id": prod_id,
                 "quantity": 1.0,
                 "reason": f"Tentativa em estoque zerado {idx}",
             },
-            headers={
-                **auth_headers,
-                "X-Idempotency-Key": str(uuid.uuid4()),
-            },
+            headers={"X-Idempotency-Key": str(uuid.uuid4())},
         )
         return res.status_code
 
@@ -144,10 +162,10 @@ def test_concurrent_stock_out_at_zero_balance_never_goes_negative(client, auth_h
 
     assert all(status == 422 for status in statuses)
 
-    prod_check = client.get(f"/api/products/{prod_id}").json()
+    prod_check = concurrent_client.get(f"/api/products/{prod_id}").json()
     assert prod_check["current_quantity_scaled"] == 0
 
-    movs = client.get(f"/api/inventory/products/{prod_id}/movements").json()
+    movs = concurrent_client.get(f"/api/inventory/products/{prod_id}/movements").json()
     assert len([m for m in movs if m["type"] == "OUT"]) == 0
 
 
