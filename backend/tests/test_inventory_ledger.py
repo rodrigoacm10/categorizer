@@ -130,3 +130,48 @@ def test_stock_out_insufficient_stock_rejection(client):
     assert not any(m["type"] == "OUT" for m in movs)
 
 
+def test_stock_adjustment_positive_and_negative_delta(client):
+    """
+    4. RF-04 / Teste Obrigatório 4:
+    Testar ajuste aumentando o saldo (delta positivo) e ajuste reduzindo o saldo (delta negativo).
+    """
+    prod = client.post("/api/products", json={
+        "name": "Parafuso Inox 6x50",
+        "unit": "CX",
+        "initial_quantity": 20.0,
+    }).json()
+    prod_id = prod["id"]
+
+    # 1. Ajuste Positivo: Contagem apurou 28 CX (+8 delta)
+    res_adj_pos = client.post("/api/inventory/adjustment", json={
+        "product_id": prod_id,
+        "quantity": 28.0,
+        "reason": "Inventário rotativo: caixas adicionais encontradas",
+    })
+    assert res_adj_pos.status_code == 201
+    adj_pos = res_adj_pos.json()
+    assert adj_pos["type"] == "ADJUSTMENT"
+    assert adj_pos["quantity_scaled"] == 8000
+    assert float(adj_pos["quantity"]) == 8.0
+    assert adj_pos["balance_after_scaled"] == 28000
+    assert float(adj_pos["balance_after"]) == 28.0
+
+    # 2. Ajuste Negativo: Contagem apurou 15 CX (-13 delta)
+    res_adj_neg = client.post("/api/inventory/adjustment", json={
+        "product_id": prod_id,
+        "quantity": 15.0,
+        "reason": "Inventário rotativo: caixas danificadas descartadas",
+    })
+    assert res_adj_neg.status_code == 201
+    adj_neg = res_adj_neg.json()
+    assert adj_neg["type"] == "ADJUSTMENT"
+    assert adj_neg["quantity_scaled"] == -13000
+    assert float(adj_neg["quantity"]) == -13.0
+    assert adj_neg["balance_after_scaled"] == 15000
+    assert float(adj_neg["balance_after"]) == 15.0
+
+    # Confirma saldo final no produto
+    prod_check = client.get(f"/api/products/{prod_id}").json()
+    assert float(prod_check["current_quantity"]) == 15.0
+
+
