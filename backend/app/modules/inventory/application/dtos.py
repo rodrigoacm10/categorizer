@@ -95,3 +95,13 @@ class ProductBalanceResponseDto(BaseModel):
     current_quantity_scaled: int
     is_low_stock: bool
     min_stock: Optional[Decimal] = None
+
+
+class InventorySummaryResponseDto(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    total_products: int = Field(..., description="Total de produtos ativos no catálogo do tenant")
+    low_stock_count: int = Field(..., description="Quantidade de produtos ativos onde current_quantity <= min_stock e current_quantity > 0")
+    out_of_stock_count: int = Field(..., description="Quantidade de produtos ativos onde current_quantity == 0")
+    movements_today: int = Field(..., description="Total de movimentações contábeis registradas nas últimas 24 horas no tenant")
+
