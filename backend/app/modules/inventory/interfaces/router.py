@@ -14,6 +14,7 @@ from app.modules.inventory.application.dtos import (
     StockAdjustmentRequestDto,
     StockMovementResponseDto,
     ProductBalanceResponseDto,
+    InventorySummaryResponseDto,
     MovementTypeEnum,
 )
 from app.modules.inventory.application.use_cases import (
@@ -22,6 +23,8 @@ from app.modules.inventory.application.use_cases import (
     RegisterStockAdjustmentUseCase,
     ListStockMovementsUseCase,
     GetProductBalanceUseCase,
+    GetInventorySummaryUseCase,
+    get_inventory_summary,
     process_stock_movement,
     get_product_ledger,
     list_all_movements,
@@ -47,6 +50,14 @@ def _check_movement_role_permission(role: TenantRole, movement_type: Optional[Un
             raise InsufficientPermissionsError(
                 detail=f"Papel '{role.value}' não possui permissão para registrar ajustes de estoque."
             )
+
+
+def _check_summary_role_permission(role: TenantRole):
+    if role not in (TenantRole.OWNER, TenantRole.GESTOR, TenantRole.ALMOXARIFE, TenantRole.AUDITOR):
+        raise InsufficientPermissionsError(
+            detail=f"Papel '{role.value}' não possui permissão para acessar o resumo de inventário."
+        )
+
 
 
 @router.post("/in", response_model=StockMovementResponseDto, status_code=status.HTTP_201_CREATED)
@@ -306,3 +317,20 @@ def get_product_balance_endpoint(
     uow = InventoryUnitOfWork(db)
     use_case = GetProductBalanceUseCase(uow)
     return use_case.execute(tenant_id=context.tenant.id, product_id=product_id)
+
+
+@router.get("/summary", response_model=InventorySummaryResponseDto)
+def get_inventory_summary_endpoint(
+    context: TenantContext = Depends(get_tenant_context),
+    db: Session = Depends(get_db),
+):
+    """
+    Retorna o resumo consolidado de KPIs do estoque e movimentações do tenant nas últimas 24 horas.
+    Acessível a qualquer membro ativo do tenant (OWNER, GESTOR, ALMOXARIFE, AUDITOR).
+    Rejeitado com HTTP 403 se o usuário não possuir vínculo ativo com o tenant.
+    """
+    _check_summary_role_permission(context.role)
+    uow = InventoryUnitOfWork(db)
+    use_case = GetInventorySummaryUseCase(uow)
+    return use_case.execute(tenant_id=context.tenant.id)
+
