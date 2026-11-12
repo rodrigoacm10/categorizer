@@ -1,121 +1,111 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
-  Boxes,
   Warehouse,
-  ArrowRight,
-  ShieldCheck,
-  Activity,
-  Layers,
+  Boxes,
   History,
-  Plus,
+  ArrowRight,
+  ShieldAlert,
 } from "lucide-react";
-import { Button, RoleBadge } from "@/shared/components";
+import { KPIStrip } from "@/features/dashboard/components/KPIStrip";
+import { QuickActionToolbar } from "@/features/dashboard/components/QuickActionToolbar";
+import { CriticalStockTable } from "@/features/dashboard/components/CriticalStockTable";
 import { useTenant } from "@/features/tenants/hooks/useTenant";
-import { storage } from "@/shared/lib/storage";
+import { RoleBadge } from "@/shared/components/Badge";
 
 export default function DashboardPage() {
-  const router = useRouter();
   const { tenantId, role } = useTenant();
 
-  useEffect(() => {
-    const token = storage.getToken();
-    if (!token) {
-      router.push("/login");
-    } else if (!tenantId) {
-      router.push("/tenants");
-    }
-  }, [router, tenantId]);
-
   return (
-    <div className="min-h-screen bg-zinc-50 font-sans text-zinc-950 flex flex-col justify-between">
-      {/* TopBar Industrial da Bancada */}
-      <header className="h-12 border-b border-zinc-200 bg-white px-6 flex items-center justify-between">
+    <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 space-y-6">
+      {/* Subheader Operacional de Contexto do Almoxarifado */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-zinc-200">
         <div className="flex items-center gap-3">
-          <div className="flex h-7 w-7 items-center justify-center bg-zinc-900 text-white rounded">
-            <Boxes className="h-4 w-4" />
+          <div className="flex h-8 w-8 items-center justify-center bg-zinc-950 text-white rounded shrink-0">
+            <Warehouse className="h-4 w-4" />
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-xs font-bold tracking-widest text-zinc-950 uppercase">
-              EXTENSÃO
-            </span>
-            <span className="text-zinc-400 font-mono text-[11px]">//</span>
-            <span className="text-[11px] font-mono text-zinc-600 uppercase tracking-wider">
-              BANCADA OPERACIONAL
-            </span>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-bold text-zinc-950 uppercase tracking-wide font-mono">
+                Bancada de Operações de Estoque
+              </h1>
+              {role && <RoleBadge role={role} size="sm" showDot={true} />}
+            </div>
+            <p className="text-xs text-zinc-500 font-mono">
+              Unidade ativa: <span className="font-semibold text-zinc-800">{tenantId || "Carregando..."}</span>
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          {role && <RoleBadge role={role} />}
+        <div className="flex items-center gap-3 text-xs font-mono">
           <Link
-            href="/tenants"
-            className="text-xs font-mono text-zinc-600 hover:text-zinc-950 underline"
+            href="/inventory/movements"
+            className="inline-flex items-center gap-1.5 text-zinc-600 hover:text-zinc-950 transition-colors"
           >
-            Trocar Almoxarifado
+            <History className="w-3.5 h-3.5 text-zinc-400" />
+            <span>Extrato do Livro-Razão</span>
+            <ArrowRight className="w-3 h-3 text-zinc-400" />
           </Link>
-        </div>
-      </header>
-
-      {/* Faixa Linear de Status */}
-      <div className="border-b border-zinc-200 bg-zinc-100/60 px-6 py-2 flex items-center justify-between font-mono text-xs text-zinc-600">
-        <div className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-emerald-500" />
-          <span>ALMOXARIFADO ATIVO:</span>
-          <span className="font-bold text-zinc-900">{tenantId || "Nenhum"}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span>ESCALA FIXA: 10³</span>
-          <span className="text-zinc-300">|</span>
-          <span>LIVRO-RAZÃO ATIVO</span>
         </div>
       </div>
 
-      {/* Conteúdo Central */}
-      <main className="flex-1 max-w-5xl w-full mx-auto p-6 md:p-8 space-y-6">
-        <div className="border border-zinc-200 bg-white p-6 space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center bg-zinc-900 text-white rounded">
-              <Warehouse className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="text-base font-bold text-zinc-950 font-sans">
-                Bancada Industrial do Almoxarifado
-              </h1>
-              <p className="text-xs text-zinc-500 font-mono">
-                Contexto multi-tenant ativo via cabeçalho X-Tenant-ID.
-              </p>
-            </div>
-          </div>
+      {/* 1. Faixa Contínua de KPIs (FT-09) */}
+      <section aria-label="Indicadores Operacionais">
+        <KPIStrip />
+      </section>
 
-          <p className="text-xs text-zinc-700 leading-relaxed">
-            Bem-vindo ao terminal de operações de estoque. Aqui você gerencia o catálogo técnico de SKUs,
-            executa movimentações físicas de entrada e saída com idempotência estrita (RFC 9474) e audita o extrato contábil perpétuo do livro-razão.
-          </p>
+      {/* 2. Barra de Ações Rápidas de Bancada (FT-10) */}
+      <section aria-label="Ações Rápidas">
+        <QuickActionToolbar />
+      </section>
 
-          <div className="pt-4 border-t border-zinc-100 flex flex-wrap gap-3">
-            <Link href="/workbench">
-              <Button variant="solid" size="sm" rightIcon={<ArrowRight className="h-3.5 w-3.5" />}>
-                Acessar Demonstração da Bancada
-              </Button>
-            </Link>
-            <Link href="/tenants">
-              <Button variant="outline" size="sm">
-                Voltar à Seleção de Almoxarifados
-              </Button>
-            </Link>
+      {/* 3. Tabela de Alertas Críticos de Reposição (FT-10) */}
+      <section aria-label="Alertas Críticos de Estoque">
+        <CriticalStockTable />
+      </section>
+
+      {/* 4. Atalhos e Informações Rápidas de Bancada */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+        <div className="border border-zinc-200 bg-white p-4 flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 font-mono text-xs font-bold text-zinc-950 uppercase">
+              <Boxes className="w-4 h-4 text-zinc-700" />
+              <span>Catálogo Técnico de Produtos</span>
+            </div>
+            <p className="text-xs text-zinc-500 leading-relaxed">
+              Consulte a listagem completa de SKUs, unidades de medida e pontos de reposição cadastrados no almoxarifado.
+            </p>
           </div>
+          <Link
+            href="/products"
+            className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-xs font-medium text-zinc-900 transition-colors"
+          >
+            <span>Ver Catálogo</span>
+            <ArrowRight className="w-3 h-3" />
+          </Link>
         </div>
-      </main>
 
-      {/* Rodapé Industrial */}
-      <footer className="h-10 border-t border-zinc-200 bg-white px-6 flex items-center justify-between text-[11px] text-zinc-500 font-mono">
-        <span>ESTOQUE & LIVRO-RAZÃO MULTI-TENANT</span>
-        <span>SESSÃO AUTENTICADA</span>
-      </footer>
+        <div className="border border-zinc-200 bg-white p-4 flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 font-mono text-xs font-bold text-zinc-950 uppercase">
+              <History className="w-4 h-4 text-zinc-700" />
+              <span>Extrato Perpétuo do Ledger</span>
+            </div>
+            <p className="text-xs text-zinc-500 leading-relaxed">
+              Auditoria imutável de todas as entradas, saídas e ajustes com chaves de idempotência RFC 9474 rastreadas.
+            </p>
+          </div>
+          <Link
+            href="/inventory/movements"
+            className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-xs font-medium text-zinc-900 transition-colors"
+          >
+            <span>Ver Extrato</span>
+            <ArrowRight className="w-3 h-3" />
+          </Link>
+        </div>
+      </section>
     </div>
   );
 }
