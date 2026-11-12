@@ -1,3 +1,4 @@
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Union, Callable
 from uuid import UUID
 from sqlalchemy.orm import Session
@@ -84,3 +85,30 @@ class InventoryUnitOfWork:
             query = query.filter(ProductModel.is_active == True)
 
         return query.with_for_update().first()
+
+    def get_inventory_summary(
+        self,
+        tenant_id: Union[UUID, str],
+        since: Optional[datetime] = None,
+    ) -> dict:
+        """
+        Calcula as métricas de agregação e KPIs do inventário do tenant:
+        - total_products: total de produtos ativos no catálogo do tenant.
+        - low_stock_count: produtos ativos com current_quantity <= min_stock e current_quantity > 0.
+        - out_of_stock_count: produtos ativos com current_quantity == 0.
+        - movements_today: movimentações contábeis registradas desde o timestamp 'since' (padrão: 24h).
+        """
+        t_uuid = UUID(str(tenant_id)) if not isinstance(tenant_id, UUID) else tenant_id
+        if since is None:
+            since = datetime.now(timezone.utc) - timedelta(hours=24)
+
+        prod_counts = self.products.get_inventory_summary_counts(t_uuid)
+        movements_today = self.movements.count_movements_since(t_uuid, since=since)
+
+        return {
+            "total_products": prod_counts["total_products"],
+            "low_stock_count": prod_counts["low_stock_count"],
+            "out_of_stock_count": prod_counts["out_of_stock_count"],
+            "movements_today": movements_today,
+        }
+
