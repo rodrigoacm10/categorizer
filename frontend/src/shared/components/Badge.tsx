@@ -120,12 +120,14 @@ export interface RoleBadgeProps {
   role: "OWNER" | "GESTOR" | "ALMOXARIFE" | "AUDITOR" | string;
   className?: string;
   showDot?: boolean;
+  size?: "sm" | "md";
 }
 
 export const RoleBadge: React.FC<RoleBadgeProps> = ({
   role,
   className,
   showDot = true,
+  size = "sm",
 }) => {
   const normalized = (role || "").toUpperCase();
   let variant: BadgeVariant = "info";
@@ -138,7 +140,7 @@ export const RoleBadge: React.FC<RoleBadgeProps> = ({
   return (
     <Badge
       variant={variant}
-      size="sm"
+      size={size}
       showDot={showDot}
       className={className}
       aria-label={`Papel: ${normalized}`}
