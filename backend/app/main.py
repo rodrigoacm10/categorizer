@@ -37,7 +37,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Cache", "X-Idempotency-Key", "X-Tenant-ID"]
+    expose_headers=["X-Cache", "X-Idempotency-Key", "X-Tenant-ID", "X-Total-Count", "X-Total-Pages"]
 )
 
 # Rotas

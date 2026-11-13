@@ -1,5 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timezone
+import math
 from fastapi import APIRouter, Depends, Header, Query, Response, status, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional, Union
 
@@ -22,6 +24,7 @@ from app.modules.inventory.application.use_cases import (
     RegisterStockOutUseCase,
     RegisterStockAdjustmentUseCase,
     ListStockMovementsUseCase,
+    ExportStockMovementsUseCase,
     GetProductBalanceUseCase,
     GetInventorySummaryUseCase,
     get_inventory_summary,
@@ -249,8 +252,40 @@ def create_movement_endpoint(
         raise exc
 
 
+@router.get("/movements/export")
+def export_movements_endpoint(
+    product_id: Optional[str] = Query(None),
+    type: Optional[str] = Query(None),
+    start_date: Optional[datetime] = Query(None),
+    end_date: Optional[datetime] = Query(None),
+    context: TenantContext = Depends(require_roles(TenantRole.OWNER, TenantRole.GESTOR, TenantRole.ALMOXARIFE, TenantRole.AUDITOR)),
+    db: Session = Depends(get_db),
+):
+    """
+    Exporta o extrato do Livro-Razão Contábil do tenant em formato CSV (StreamingResponse).
+    Restrito a usuários autorizados (OWNER, GESTOR, ALMOXARIFE, AUDITOR) com isolamento estrito de tenant.
+    """
+    uow = InventoryUnitOfWork(db)
+    use_case = ExportStockMovementsUseCase(uow)
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    filename = f"extrato-estoque-{context.tenant.slug}-{date_str}.csv"
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"'
+    }
+    generator = use_case.execute(
+        tenant_id=context.tenant.id,
+        operator_email=context.user.email,
+        product_id=product_id,
+        movement_type=type,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return StreamingResponse(generator, media_type="text/csv", headers=headers)
+
+
 @router.get("/movements", response_model=List[StockMovementResponseDto])
 def list_movements_endpoint(
+    response: Response,
     product_id: Optional[str] = Query(None),
     type: Optional[str] = Query(None),
     start_date: Optional[datetime] = Query(None),
@@ -265,6 +300,29 @@ def list_movements_endpoint(
     """
     uow = InventoryUnitOfWork(db)
     use_case = ListStockMovementsUseCase(uow)
+    total_count = use_case.count(
+        tenant_id=context.tenant.id,
+        product_id=product_id,
+        movement_type=type,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    total_pages = math.ceil(total_count / limit) if limit > 0 else 1
+
+    response.headers["X-Total-Count"] = str(total_count)
+    response.headers["X-Total-Pages"] = str(total_pages)
+
+    expose = response.headers.get("Access-Control-Expose-Headers")
+    headers_to_expose = ["X-Total-Count", "X-Total-Pages"]
+    if expose:
+        parts = [p.strip() for p in expose.split(",")]
+        for h in headers_to_expose:
+            if h not in parts:
+                parts.append(h)
+        response.headers["Access-Control-Expose-Headers"] = ", ".join(parts)
+    else:
+        response.headers["Access-Control-Expose-Headers"] = ", ".join(headers_to_expose)
+
     return use_case.execute(
         tenant_id=context.tenant.id,
         product_id=product_id,

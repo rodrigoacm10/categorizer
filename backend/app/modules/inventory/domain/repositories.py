@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Union
 from uuid import UUID
 from app.modules.inventory.domain.entities import StockMovement
 
@@ -15,7 +15,7 @@ class IStockMovementRepository(ABC):
     def list_by_product(
         self,
         tenant_id: UUID,
-        product_id: UUID,
+        product_id: Union[UUID, str],
         limit: int = 100,
         offset: int = 0,
     ) -> List[StockMovement]:
@@ -26,14 +26,26 @@ class IStockMovementRepository(ABC):
     def list_all(
         self,
         tenant_id: UUID,
-        product_id: Optional[UUID] = None,
+        product_id: Optional[Union[UUID, str]] = None,
         movement_type: Optional[str] = None,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
-        limit: int = 100,
+        limit: Optional[int] = 100,
         offset: int = 0,
     ) -> List[StockMovement]:
         """Consulta histórico geral do livro-razão com filtros opcionais."""
+        pass
+
+    @abstractmethod
+    def count_movements(
+        self,
+        tenant_id: UUID,
+        product_id: Optional[Union[UUID, str]] = None,
+        movement_type: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+    ) -> int:
+        """Contabiliza o total de movimentações contábeis do tenant com filtros opcionais."""
         pass
 
     @abstractmethod

@@ -61,7 +61,18 @@ class ListCategoriesUseCase:
 
     def execute(self, tenant_id: UUID) -> List[CategoryResponseDTO]:
         categories = self.repo.list(tenant_id)
-        return [CategoryResponseDTO.model_validate(c) for c in categories]
+        counts = self.repo.get_products_count_by_category(tenant_id)
+        return [
+            CategoryResponseDTO(
+                id=str(c.id),
+                name=c.name,
+                description=c.description,
+                color=c.color,
+                created_at=c.created_at,
+                products_count=counts.get(c.id, 0),
+            )
+            for c in categories
+        ]
 
 
 class DeleteCategoryUseCase:
@@ -165,6 +176,22 @@ class ListProductsUseCase:
             offset=offset,
         )
         return [ProductResponseDTO.from_orm_model(p) for p in products]
+
+    def count(
+        self,
+        tenant_id: UUID,
+        category_id: Optional[Union[UUID, str, List[Union[UUID, str]]]] = None,
+        low_stock_only: bool = False,
+        search: Optional[str] = None,
+        include_inactive: bool = False,
+    ) -> int:
+        return self.product_repo.count(
+            tenant_id=tenant_id,
+            category_id=category_id,
+            low_stock_only=low_stock_only,
+            search=search,
+            include_inactive=include_inactive,
+        )
 
 
 class GetProductByIdUseCase:
@@ -337,6 +364,25 @@ def list_products(
         include_inactive=include_inactive,
         limit=limit,
         offset=offset,
+    )
+
+
+def count_products(
+    db: Session,
+    tenant_id: UUID,
+    category_ids: Optional[Union[UUID, str, List[Union[UUID, str]]]] = None,
+    category_id: Optional[Union[UUID, str, List[Union[UUID, str]]]] = None,
+    low_stock_only: bool = False,
+    search: Optional[str] = None,
+    include_inactive: bool = False,
+) -> int:
+    cat_filter = category_id if category_id is not None else category_ids
+    return ListProductsUseCase(db).count(
+        tenant_id=tenant_id,
+        category_id=cat_filter,
+        low_stock_only=low_stock_only,
+        search=search,
+        include_inactive=include_inactive,
     )
 
 
