@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List
+from typing import Optional, List, Union, Dict
 from uuid import UUID
 
 from app.modules.products.domain.entities import Product, Category
@@ -16,6 +16,10 @@ class ICategoryRepository(ABC):
 
     @abstractmethod
     def list(self, tenant_id: UUID) -> List[Category]:
+        pass
+
+    @abstractmethod
+    def get_products_count_by_category(self, tenant_id: UUID) -> Dict[UUID, int]:
         pass
 
     @abstractmethod
@@ -40,13 +44,24 @@ class IProductRepository(ABC):
     def list(
         self,
         tenant_id: UUID,
-        category_id: Optional[UUID] = None,
+        category_id: Optional[Union[UUID, str, List[Union[UUID, str]]]] = None,
         low_stock_only: bool = False,
         search: Optional[str] = None,
         include_inactive: bool = False,
         limit: int = 50,
         offset: int = 0,
     ) -> List[Product]:
+        pass
+
+    @abstractmethod
+    def count(
+        self,
+        tenant_id: UUID,
+        category_id: Optional[Union[UUID, str, List[Union[UUID, str]]]] = None,
+        low_stock_only: bool = False,
+        search: Optional[str] = None,
+        include_inactive: bool = False,
+    ) -> int:
         pass
 
     @abstractmethod

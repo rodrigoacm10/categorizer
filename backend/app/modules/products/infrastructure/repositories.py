@@ -43,6 +43,26 @@ class SQLAlchemyCategoryRepository:
             .all()
         )
 
+    def get_products_count_by_category(self, tenant_id: UUID) -> dict:
+        t_uuid = UUID(str(tenant_id)) if not isinstance(tenant_id, UUID) else tenant_id
+        rows = (
+            self.db.query(
+                product_categories.c.category_id,
+                func.count(ProductModel.id),
+            )
+            .join(
+                ProductModel,
+                and_(
+                    ProductModel.id == product_categories.c.product_id,
+                    ProductModel.tenant_id == t_uuid,
+                    ProductModel.is_active == True,
+                ),
+            )
+            .group_by(product_categories.c.category_id)
+            .all()
+        )
+        return {row[0]: row[1] for row in rows}
+
     def create(self, category: CategoryModel) -> CategoryModel:
         self.db.add(category)
         self.db.flush()
@@ -129,6 +149,45 @@ class SQLAlchemyProductRepository:
             .limit(limit)
             .all()
         )
+
+    def count(
+        self,
+        tenant_id: UUID,
+        category_id: Optional[Union[UUID, str, List[Union[UUID, str]]]] = None,
+        low_stock_only: bool = False,
+        search: Optional[str] = None,
+        include_inactive: bool = False,
+    ) -> int:
+        t_uuid = UUID(str(tenant_id)) if not isinstance(tenant_id, UUID) else tenant_id
+        query = self.db.query(func.count(ProductModel.id)).filter(ProductModel.tenant_id == t_uuid)
+
+        if not include_inactive:
+            query = query.filter(ProductModel.is_active == True)
+
+        if category_id:
+            if isinstance(category_id, list):
+                uuids = [UUID(str(cid)) if not isinstance(cid, UUID) else cid for cid in category_id]
+                query = query.filter(ProductModel.categories.any(CategoryModel.id.in_(uuids)))
+            else:
+                c_uuid = UUID(str(category_id)) if not isinstance(category_id, UUID) else category_id
+                query = query.filter(ProductModel.categories.any(CategoryModel.id == c_uuid))
+
+        if low_stock_only:
+            query = query.filter(
+                ProductModel.min_stock.isnot(None),
+                ProductModel.current_quantity <= ProductModel.min_stock,
+            )
+
+        if search and search.strip():
+            term = f"%{search.strip()}%"
+            query = query.filter(
+                or_(
+                    ProductModel.name.ilike(term),
+                    ProductModel.description.ilike(term),
+                )
+            )
+
+        return query.scalar() or 0
 
     def create(self, product: ProductModel) -> ProductModel:
         self.db.add(product)
