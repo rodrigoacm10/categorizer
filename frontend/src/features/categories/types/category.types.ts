@@ -4,6 +4,7 @@ export interface Category {
   description?: string | null;
   color: string;
   created_at: string;
+  products_count?: number;
 }
 
 export interface CreateCategoryPayload {
