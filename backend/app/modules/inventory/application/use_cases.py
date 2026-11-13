@@ -1,6 +1,8 @@
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Iterator
+import csv
+import io
 from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -238,6 +240,95 @@ class ListStockMovementsUseCase:
                 offset=offset,
             )
             return [StockMovementResponseDto.from_orm_model(m) for m in movements]
+
+    def count(
+        self,
+        tenant_id: UUID,
+        product_id: Optional[Union[UUID, str]] = None,
+        movement_type: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+    ) -> int:
+        with self.uow:
+            return self.uow.movements.count_movements(
+                tenant_id=tenant_id,
+                product_id=product_id,
+                movement_type=movement_type,
+                start_date=start_date,
+                end_date=end_date,
+            )
+
+
+class ExportStockMovementsUseCase:
+    """
+    Caso de Uso: Exportação do Livro-Razão Contábil (Ledger) em CSV.
+    - Exporta histórico completo de movimentações contábeis filtradas por tenant.
+    - Colunas: data_hora_utc, id_movimentacao, id_produto, nome_produto, unidade,
+      tipo_movimentacao, quantidade_formatada, saldo_resultante_formatado, motivo, operador_email.
+    - Retorna gerador iterável (streaming) compatível com StreamingResponse.
+    """
+    def __init__(self, uow: InventoryUnitOfWork):
+        self.uow = uow
+
+    def execute(
+        self,
+        tenant_id: UUID,
+        operator_email: str,
+        product_id: Optional[Union[UUID, str]] = None,
+        movement_type: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+    ) -> Iterator[str]:
+        with self.uow:
+            movements = self.uow.movements.list_all(
+                tenant_id=tenant_id,
+                product_id=product_id,
+                movement_type=movement_type,
+                start_date=start_date,
+                end_date=end_date,
+                limit=None,
+                offset=0,
+            )
+
+            output = io.StringIO()
+            writer = csv.writer(output)
+
+            # Cabeçalho CSV
+            writer.writerow([
+                "data_hora_utc",
+                "id_movimentacao",
+                "id_produto",
+                "nome_produto",
+                "unidade",
+                "tipo_movimentacao",
+                "quantidade_formatada",
+                "saldo_resultante_formatado",
+                "motivo",
+                "operador_email",
+            ])
+            yield output.getvalue()
+            output.seek(0)
+            output.truncate(0)
+
+            for mov in movements:
+                p_name = mov.product.name if mov.product else ""
+                p_unit = mov.product.unit if mov.product else ""
+                created_at_str = mov.created_at.isoformat() if mov.created_at else ""
+                writer.writerow([
+                    created_at_str,
+                    str(mov.id),
+                    str(mov.product_id),
+                    p_name,
+                    p_unit,
+                    str(mov.type),
+                    str(from_scaled_int(mov.quantity)),
+                    str(from_scaled_int(mov.balance_after)),
+                    mov.reason or "",
+                    operator_email,
+                ])
+                yield output.getvalue()
+                output.seek(0)
+                output.truncate(0)
 
 
 class GetProductBalanceUseCase:
