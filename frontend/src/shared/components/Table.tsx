@@ -191,3 +191,5 @@ export const TableEmpty: React.FC<TableEmptyProps> = ({
   </tr>
 );
 TableEmpty.displayName = "TableEmpty";
+
+export const TableEmptyState = TableEmpty;
