@@ -215,6 +215,20 @@ class GetProductByIdUseCase:
         return ProductResponseDTO.from_orm_model(product)
 
 
+class LookupProductUseCase:
+    def __init__(self, db: Session):
+        self.db = db
+        self.product_repo = SQLAlchemyProductRepository(db)
+
+    def execute(self, code: str, tenant_id: UUID) -> ProductResponseDTO:
+        product = self.product_repo.lookup(code=code, tenant_id=tenant_id)
+        if not product:
+            raise ProductNotFoundError(
+                detail=f"Produto com código ou nome '{code}' não foi encontrado no tenant."
+            )
+        return ProductResponseDTO.from_orm_model(product)
+
+
 class UpdateProductUseCase:
     def __init__(self, db: Session):
         self.db = db
@@ -390,6 +404,10 @@ def get_product_by_id(
     db: Session, product_id: Union[UUID, str], tenant_id: UUID, include_inactive: bool = False
 ) -> ProductResponseDTO:
     return GetProductByIdUseCase(db).execute(product_id, tenant_id, include_inactive=include_inactive)
+
+
+def lookup_product(db: Session, code: str, tenant_id: UUID) -> ProductResponseDTO:
+    return LookupProductUseCase(db).execute(code=code, tenant_id=tenant_id)
 
 
 def update_product(
