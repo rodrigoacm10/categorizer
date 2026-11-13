@@ -40,13 +40,7 @@ export function useStockSimulation(
   targetProductArg?: Product | null
 ): UseStockSimulationReturn {
   // Normalização de parâmetros (suporte a objeto de configuração ou argumentos posicionais)
-  const {
-    currentQuantity,
-    movementType,
-    quantityInput,
-    targetProduct,
-    unit: explicitUnit,
-  } = useMemo(() => {
+  const normalizedParams: UseStockSimulationParams = useMemo(() => {
     if (
       typeof paramsOrCurrentQuantity === "object" &&
       paramsOrCurrentQuantity !== null &&
@@ -55,13 +49,24 @@ export function useStockSimulation(
       return paramsOrCurrentQuantity as UseStockSimulationParams;
     }
     return {
-      currentQuantity: paramsOrCurrentQuantity,
+      currentQuantity:
+        typeof paramsOrCurrentQuantity === "number" || typeof paramsOrCurrentQuantity === "string"
+          ? paramsOrCurrentQuantity
+          : undefined,
       movementType: movementTypeArg || "IN",
       quantityInput: quantityInputArg,
       targetProduct: targetProductArg,
       unit: targetProductArg?.unit,
     };
   }, [paramsOrCurrentQuantity, movementTypeArg, quantityInputArg, targetProductArg]);
+
+  const {
+    currentQuantity,
+    movementType,
+    quantityInput,
+    targetProduct,
+    unit: explicitUnit,
+  } = normalizedParams;
 
   return useMemo(() => {
     const effectiveUnit = explicitUnit || targetProduct?.unit || "";
