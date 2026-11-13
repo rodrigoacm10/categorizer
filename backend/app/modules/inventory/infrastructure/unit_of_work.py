@@ -112,3 +112,14 @@ class InventoryUnitOfWork:
             "movements_today": movements_today,
         }
 
+    def reconcile_inventory(
+        self,
+        tenant_id: Union[UUID, str],
+    ) -> list:
+        """
+        Executa agregação contábil atômica para auditoria do tenant.
+        """
+        t_uuid = UUID(str(tenant_id)) if not isinstance(tenant_id, UUID) else tenant_id
+        return self.movements.get_reconciliation_summary(t_uuid)
+
+

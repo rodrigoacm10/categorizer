@@ -156,6 +156,41 @@ class StockMovementRepository(IStockMovementRepository):
             or 0
         )
 
+    def get_reconciliation_summary(self, tenant_id: UUID) -> List[dict]:
+        """
+        Executa agregação SQL atômica no banco calculando a soma dos deltas de stock_movements
+        por produto para o tenant_id ativo e confrontando com current_quantity de products.
+        """
+        from app.modules.products.infrastructure.models import ProductModel
+        t_uuid = UUID(str(tenant_id)) if not isinstance(tenant_id, UUID) else tenant_id
+
+        rows = (
+            self.db.query(
+                ProductModel.id.label("product_id"),
+                ProductModel.name.label("product_name"),
+                ProductModel.current_quantity.label("current_quantity_scaled"),
+                func.coalesce(func.sum(StockMovementModel.quantity), 0).label("expected_quantity_scaled"),
+            )
+            .outerjoin(
+                StockMovementModel,
+                (StockMovementModel.product_id == ProductModel.id)
+                & (StockMovementModel.tenant_id == t_uuid),
+            )
+            .filter(ProductModel.tenant_id == t_uuid)
+            .group_by(ProductModel.id, ProductModel.name, ProductModel.current_quantity)
+            .order_by(ProductModel.name.asc())
+            .all()
+        )
+
+        return [
+            {
+                "product_id": r.product_id,
+                "product_name": r.product_name,
+                "current_quantity_scaled": r.current_quantity_scaled,
+                "expected_quantity_scaled": r.expected_quantity_scaled,
+            }
+            for r in rows
+        ]
 
     def update(self, *args, **kwargs):
         raise NotImplementedError("Operações de UPDATE são terminantemente proibidas no Livro-Razão imutável.")
