@@ -73,7 +73,7 @@ class StockMovementRepository(IStockMovementRepository):
         movement_type: Optional[str] = None,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
-        limit: int = 100,
+        limit: Optional[int] = 100,
         offset: int = 0,
     ) -> List[StockMovementModel]:
         """
@@ -100,12 +100,45 @@ class StockMovementRepository(IStockMovementRepository):
         if end_date is not None:
             query = query.filter(StockMovementModel.created_at <= end_date)
 
-        return (
-            query.order_by(StockMovementModel.created_at.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
+        query = query.order_by(StockMovementModel.created_at.desc())
+        if offset:
+            query = query.offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
+
+        return query.all()
+
+    def count_movements(
+        self,
+        tenant_id: UUID,
+        product_id: Optional[Union[UUID, str]] = None,
+        movement_type: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+    ) -> int:
+        """
+        Contabiliza total de movimentações contábeis do tenant com filtros opcionais.
+        """
+        t_uuid = UUID(str(tenant_id)) if not isinstance(tenant_id, UUID) else tenant_id
+        query = (
+            self.db.query(func.count(StockMovementModel.id))
+            .filter(StockMovementModel.tenant_id == t_uuid)
         )
+
+        if product_id is not None:
+            p_uuid = UUID(str(product_id)) if not isinstance(product_id, UUID) else product_id
+            query = query.filter(StockMovementModel.product_id == p_uuid)
+
+        if movement_type is not None:
+            query = query.filter(StockMovementModel.type == str(movement_type).strip().upper())
+
+        if start_date is not None:
+            query = query.filter(StockMovementModel.created_at >= start_date)
+
+        if end_date is not None:
+            query = query.filter(StockMovementModel.created_at <= end_date)
+
+        return query.scalar() or 0
 
     def count_movements_since(self, tenant_id: UUID, since: datetime) -> int:
         """
