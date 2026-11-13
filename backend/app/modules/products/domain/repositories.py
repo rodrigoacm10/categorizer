@@ -41,6 +41,10 @@ class IProductRepository(ABC):
         pass
 
     @abstractmethod
+    def lookup(self, code: str, tenant_id: UUID) -> Optional[Product]:
+        pass
+
+    @abstractmethod
     def list(
         self,
         tenant_id: UUID,
