@@ -101,6 +101,44 @@ class SQLAlchemyProductRepository:
             query = query.filter(ProductModel.is_active == is_active)
         return query.first()
 
+    def lookup(self, code: str, tenant_id: UUID) -> Optional[ProductModel]:
+        t_uuid = UUID(str(tenant_id)) if not isinstance(tenant_id, UUID) else tenant_id
+        clean_code = code.strip()
+
+        # 1. Tenta parsear code como UUID
+        try:
+            parsed_uuid = UUID(clean_code)
+            product = (
+                self.db.query(ProductModel)
+                .options(selectinload(ProductModel.categories))
+                .filter(
+                    ProductModel.id == parsed_uuid,
+                    ProductModel.tenant_id == t_uuid,
+                    ProductModel.is_active == True,
+                )
+                .first()
+            )
+            if product:
+                return product
+        except (ValueError, AttributeError):
+            pass
+
+        # 2. Se não for UUID ou não encontrar por UUID, busca por correspondência exata de nome
+        query = (
+            self.db.query(ProductModel)
+            .options(selectinload(ProductModel.categories))
+            .filter(
+                ProductModel.tenant_id == t_uuid,
+                ProductModel.is_active == True,
+            )
+        )
+        if clean_code != code:
+            query = query.filter(or_(ProductModel.name == code, ProductModel.name == clean_code))
+        else:
+            query = query.filter(ProductModel.name == code)
+
+        return query.first()
+
     def list(
         self,
         tenant_id: UUID,
