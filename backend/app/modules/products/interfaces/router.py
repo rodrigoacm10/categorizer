@@ -221,12 +221,12 @@ def list_products_endpoint(
     summary="Buscar produto por código de barras ou UUID",
 )
 def lookup_product_endpoint(
+    response: Response,
     code: str = Query(
         ...,
         min_length=1,
         description="UUID do produto ou código/nome exato escaneado pelo leitor de código de barras",
     ),
-    response: Response,
     context: TenantContext = Depends(
         require_roles(
             TenantRole.OWNER,
