@@ -35,3 +35,9 @@ class IStockMovementRepository(ABC):
     ) -> List[StockMovement]:
         """Consulta histórico geral do livro-razão com filtros opcionais."""
         pass
+
+    @abstractmethod
+    def count_movements_since(self, tenant_id: UUID, since: datetime) -> int:
+        """Contabiliza movimentações contábeis do tenant a partir de uma data específica."""
+        pass
+

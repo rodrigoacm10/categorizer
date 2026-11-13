@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from typing import List, Optional, Union
 from uuid import UUID
@@ -16,6 +16,7 @@ from app.modules.inventory.application.dtos import (
     CreateStockMovementDto,
     StockMovementResponseDto,
     ProductBalanceResponseDto,
+    InventorySummaryResponseDto,
     MovementTypeEnum,
 )
 from app.shared.domain.exceptions import ProductNotFoundError
@@ -275,6 +276,45 @@ class GetProductBalanceUseCase:
                 is_low_stock=is_low,
                 min_stock=min_stock_dec,
             )
+
+
+class GetInventorySummaryUseCase:
+    """
+    Caso de Uso: Obtenção de KPIs e Agregações de Estoque e Livro-Razão.
+    - Executa agregação estritamente filtrada por tenant_id.
+    - Consultas otimizadas via SQLAlchemy (SELECT COUNT).
+    - Retorna InventorySummaryResponseDto com:
+      - total_products: Total de produtos ativos no catálogo do tenant.
+      - low_stock_count: Quantidade de produtos ativos onde current_quantity <= min_stock e current_quantity > 0.
+      - out_of_stock_count: Quantidade de produtos ativos onde current_quantity == 0.
+      - movements_today: Total de movimentações contábeis registradas nas últimas 24 horas no tenant.
+    """
+    def __init__(self, uow: InventoryUnitOfWork):
+        self.uow = uow
+
+    def execute(
+        self,
+        tenant_id: Union[UUID, str],
+        since: Optional[datetime] = None,
+    ) -> InventorySummaryResponseDto:
+        t_uuid = UUID(str(tenant_id)) if not isinstance(tenant_id, UUID) else tenant_id
+        if since is None:
+            since = datetime.now(timezone.utc) - timedelta(hours=24)
+
+        with self.uow:
+            summary_data = self.uow.get_inventory_summary(tenant_id=t_uuid, since=since)
+            return InventorySummaryResponseDto(
+                total_products=summary_data["total_products"],
+                low_stock_count=summary_data["low_stock_count"],
+                out_of_stock_count=summary_data["out_of_stock_count"],
+                movements_today=summary_data["movements_today"],
+            )
+
+
+def get_inventory_summary(db: Session, tenant_id: UUID) -> InventorySummaryResponseDto:
+    uow = InventoryUnitOfWork(db)
+    return GetInventorySummaryUseCase(uow).execute(tenant_id=tenant_id)
+
 
 
 # Aliases e compatibilidade com chamadas procedurais legadas

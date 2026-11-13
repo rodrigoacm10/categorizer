@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.shared.domain.exceptions import ProblemDetailsException
+from app.shared.domain.exceptions import ProblemDetailsException, MissingTenantHeaderError
 from app.modules.auth.interfaces.router import router as auth_router
 from app.modules.tenants.interfaces.router import router as tenants_router
 from app.modules.products.interfaces.router import router as products_router
@@ -21,7 +21,14 @@ async def problem_details_handler(request: Request, exc: ProblemDetailsException
     if not payload.get("instance"):
         payload["instance"] = request.url.path
     headers = getattr(exc, "headers", None)
-    return JSONResponse(status_code=exc.status_code, content=payload, headers=headers)
+    status_code = exc.status_code
+    if request.url.path.rstrip("/") == "/api/inventory/summary" and isinstance(exc, MissingTenantHeaderError):
+        status_code = 403
+        payload["status"] = 403
+        payload["type"] = "https://api.estoque.local/errors/tenant-access-denied"
+        payload["title"] = "Acesso Negado ao Tenant"
+    return JSONResponse(status_code=status_code, content=payload, headers=headers)
+
 
 # Configuração de CORS
 app.add_middleware(

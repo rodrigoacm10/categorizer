@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional, List, Union
 from uuid import UUID
 from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import func
 
 from app.modules.inventory.domain.entities import StockMovement
 from app.modules.inventory.domain.repositories import IStockMovementRepository
@@ -105,6 +106,23 @@ class StockMovementRepository(IStockMovementRepository):
             .limit(limit)
             .all()
         )
+
+    def count_movements_since(self, tenant_id: UUID, since: datetime) -> int:
+        """
+        Contabiliza total de movimentações contábeis do tenant desde o timestamp informado (ex: últimas 24h).
+        Utiliza o índice composto ix_stock_movements_tenant_created para execução otimizada.
+        """
+        t_uuid = UUID(str(tenant_id)) if not isinstance(tenant_id, UUID) else tenant_id
+        return (
+            self.db.query(func.count(StockMovementModel.id))
+            .filter(
+                StockMovementModel.tenant_id == t_uuid,
+                StockMovementModel.created_at >= since,
+            )
+            .scalar()
+            or 0
+        )
+
 
     def update(self, *args, **kwargs):
         raise NotImplementedError("Operações de UPDATE são terminantemente proibidas no Livro-Razão imutável.")

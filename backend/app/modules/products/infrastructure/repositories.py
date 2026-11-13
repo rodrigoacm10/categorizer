@@ -1,7 +1,7 @@
 from typing import Optional, List, Union
 from uuid import UUID
 from sqlalchemy.orm import Session, selectinload
-from sqlalchemy import or_
+from sqlalchemy import or_, func, case, and_
 
 from app.modules.products.infrastructure.models import ProductModel, CategoryModel, product_categories
 
@@ -141,6 +141,76 @@ class SQLAlchemyProductRepository:
 
     def delete(self, product: ProductModel) -> None:
         self.db.flush()
+
+    def count_active_products(self, tenant_id: UUID) -> int:
+        t_uuid = UUID(str(tenant_id)) if not isinstance(tenant_id, UUID) else tenant_id
+        return (
+            self.db.query(func.count(ProductModel.id))
+            .filter(ProductModel.tenant_id == t_uuid, ProductModel.is_active == True)
+            .scalar()
+            or 0
+        )
+
+    def count_low_stock_products(self, tenant_id: UUID) -> int:
+        t_uuid = UUID(str(tenant_id)) if not isinstance(tenant_id, UUID) else tenant_id
+        return (
+            self.db.query(func.count(ProductModel.id))
+            .filter(
+                ProductModel.tenant_id == t_uuid,
+                ProductModel.is_active == True,
+                ProductModel.min_stock.isnot(None),
+                ProductModel.current_quantity <= ProductModel.min_stock,
+                ProductModel.current_quantity > 0,
+            )
+            .scalar()
+            or 0
+        )
+
+    def count_out_of_stock_products(self, tenant_id: UUID) -> int:
+        t_uuid = UUID(str(tenant_id)) if not isinstance(tenant_id, UUID) else tenant_id
+        return (
+            self.db.query(func.count(ProductModel.id))
+            .filter(
+                ProductModel.tenant_id == t_uuid,
+                ProductModel.is_active == True,
+                ProductModel.current_quantity == 0,
+            )
+            .scalar()
+            or 0
+        )
+
+    def get_inventory_summary_counts(self, tenant_id: UUID) -> dict:
+        t_uuid = UUID(str(tenant_id)) if not isinstance(tenant_id, UUID) else tenant_id
+        row = (
+            self.db.query(
+                func.count(ProductModel.id).label("total_products"),
+                func.count(
+                    case(
+                        (
+                            and_(
+                                ProductModel.min_stock.isnot(None),
+                                ProductModel.current_quantity <= ProductModel.min_stock,
+                                ProductModel.current_quantity > 0,
+                            ),
+                            1,
+                        )
+                    )
+                ).label("low_stock_count"),
+                func.count(
+                    case(
+                        (ProductModel.current_quantity == 0, 1)
+                    )
+                ).label("out_of_stock_count"),
+            )
+            .filter(ProductModel.tenant_id == t_uuid, ProductModel.is_active == True)
+            .one()
+        )
+        return {
+            "total_products": int(row.total_products or 0),
+            "low_stock_count": int(row.low_stock_count or 0),
+            "out_of_stock_count": int(row.out_of_stock_count or 0),
+        }
+
 
 
 ProductRepository = SQLAlchemyProductRepository
