@@ -158,7 +158,7 @@ class MemberAlreadyExistsError(ProblemDetailsException):
 class SoleOwnerRemovalError(ProblemDetailsException):
     def __init__(self, detail: str = "Tentativa de remover ou rebaixar o único OWNER remanescente do tenant.", instance: Optional[str] = None):
         super().__init__(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422),
             type_suffix="sole-owner-removal",
             title="Único Owner Não Pode Ser Removido",
             detail=detail,
