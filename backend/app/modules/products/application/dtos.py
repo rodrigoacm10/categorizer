@@ -37,6 +37,7 @@ class CategoryResponseDto(CategoryBaseDto):
 
     id: str
     created_at: datetime
+    products_count: int = 0
 
     @field_validator("id", mode="before")
     @classmethod
