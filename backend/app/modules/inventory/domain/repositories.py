@@ -53,3 +53,12 @@ class IStockMovementRepository(ABC):
         """Contabiliza movimentações contábeis do tenant a partir de uma data específica."""
         pass
 
+    @abstractmethod
+    def get_reconciliation_summary(self, tenant_id: UUID) -> List[dict]:
+        """
+        Executa agregação atômica no banco calculando a soma dos deltas de stock_movements
+        por produto para o tenant_id ativo e comparando com current_quantity de products.
+        """
+        pass
+
+

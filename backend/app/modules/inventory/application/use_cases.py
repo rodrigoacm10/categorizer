@@ -19,6 +19,8 @@ from app.modules.inventory.application.dtos import (
     StockMovementResponseDto,
     ProductBalanceResponseDto,
     InventorySummaryResponseDto,
+    ProductDiscrepancyDto,
+    InventoryReconciliationReportDto,
     MovementTypeEnum,
 )
 from app.shared.domain.exceptions import ProductNotFoundError
@@ -405,6 +407,65 @@ class GetInventorySummaryUseCase:
 def get_inventory_summary(db: Session, tenant_id: UUID) -> InventorySummaryResponseDto:
     uow = InventoryUnitOfWork(db)
     return GetInventorySummaryUseCase(uow).execute(tenant_id=tenant_id)
+
+
+class ReconcileInventoryUseCase:
+    """
+    Caso de Uso: Reconciliação Contábil e Auditoria Matemática do Inventário.
+    - Executa agregação SQL atômica calculando a soma dos deltas de stock_movements
+      por produto para o tenant_id ativo.
+    - Compara com current_quantity de products.
+    - Se houver discrepância, lista o detalhe; se não houver, retorna is_reconciled=True e discrepancies=[].
+    - Isolamento estrito por tenant_id.
+    """
+    def __init__(self, uow_or_db: Union[InventoryUnitOfWork, Session]):
+        if isinstance(uow_or_db, Session):
+            self.uow = InventoryUnitOfWork(uow_or_db)
+        else:
+            self.uow = uow_or_db
+
+    def execute(self, tenant_id: Union[UUID, str]) -> InventoryReconciliationReportDto:
+        t_uuid = UUID(str(tenant_id)) if not isinstance(tenant_id, UUID) else tenant_id
+
+        with self.uow:
+            rows = self.uow.reconcile_inventory(t_uuid)
+
+        discrepancies: List[ProductDiscrepancyDto] = []
+        for r in rows:
+            product_id = r["product_id"]
+            product_name = r["product_name"]
+            curr_scaled = r["current_quantity_scaled"]
+            exp_scaled = r["expected_quantity_scaled"]
+            diff_scaled = curr_scaled - exp_scaled
+
+            if diff_scaled != 0:
+                discrepancy = ProductDiscrepancyDto(
+                    product_id=product_id,
+                    product_name=product_name,
+                    current_quantity=float(from_scaled_int(curr_scaled)),
+                    expected_quantity=float(from_scaled_int(exp_scaled)),
+                    difference=float(from_scaled_int(diff_scaled)),
+                    has_discrepancy=True,
+                )
+                discrepancies.append(discrepancy)
+
+        total_checked = len(rows)
+        discrepant_count = len(discrepancies)
+        is_reconciled = (discrepant_count == 0)
+
+        return InventoryReconciliationReportDto(
+            tenant_id=t_uuid,
+            total_products_checked=total_checked,
+            discrepant_products_count=discrepant_count,
+            is_reconciled=is_reconciled,
+            discrepancies=discrepancies,
+            generated_at=datetime.now(timezone.utc),
+        )
+
+
+def reconcile_inventory(db: Session, tenant_id: UUID) -> InventoryReconciliationReportDto:
+    return ReconcileInventoryUseCase(db).execute(tenant_id=tenant_id)
+
 
 
 

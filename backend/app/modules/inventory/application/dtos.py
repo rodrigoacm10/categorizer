@@ -1,7 +1,8 @@
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional, Union
-from datetime import datetime
+from typing import Optional, Union, List
+from datetime import datetime, timezone
 from decimal import Decimal
+from uuid import UUID
 
 from app.modules.inventory.domain.enums import MovementType
 from app.shared.utils.scale import from_scaled_int
@@ -104,4 +105,27 @@ class InventorySummaryResponseDto(BaseModel):
     low_stock_count: int = Field(..., description="Quantidade de produtos ativos onde current_quantity <= min_stock e current_quantity > 0")
     out_of_stock_count: int = Field(..., description="Quantidade de produtos ativos onde current_quantity == 0")
     movements_today: int = Field(..., description="Total de movimentações contábeis registradas nas últimas 24 horas no tenant")
+
+
+class ProductDiscrepancyDto(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    product_id: UUID = Field(..., description="Identificador único do produto")
+    product_name: str = Field(..., description="Nome do produto no catálogo")
+    current_quantity: float = Field(..., description="Quantidade física registrada atualmente no cadastro do produto")
+    expected_quantity: float = Field(..., description="Quantidade matemática esperada resultante da soma contábil de todas as movimentações")
+    difference: float = Field(..., description="Diferença entre saldo atual e saldo esperado (current_quantity - expected_quantity)")
+    has_discrepancy: bool = Field(..., description="Indicador se existe divergência matemática entre o saldo cadastrado e o livro-razão")
+
+
+class InventoryReconciliationReportDto(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    tenant_id: UUID = Field(..., description="Identificador do tenant auditado")
+    total_products_checked: int = Field(..., description="Total de produtos auditados no tenant")
+    discrepant_products_count: int = Field(..., description="Quantidade de produtos com divergência contábil")
+    is_reconciled: bool = Field(..., description="True se 100% dos produtos auditados estão íntegros matematicamente")
+    discrepancies: List[ProductDiscrepancyDto] = Field(default_factory=list, description="Lista de detalhes dos produtos com divergência detectada")
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Data e hora UTC da geração do relatório de auditoria")
+
 

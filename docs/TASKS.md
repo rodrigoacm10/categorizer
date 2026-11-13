@@ -240,6 +240,6 @@ Consolidar a suíte global de testes automatizados com PostgreSQL 16 dedicado, e
   - Provar que consultas no Tenant A jamais retornam produtos, extratos ou movimentações do Tenant B.
 - [ ] **Subtarefa 6.3: Testes de Concorrência e Race Conditions**
   - Disparos simultâneos com `ThreadPoolExecutor` para validação de bloqueio pessimista e não-negatividade de estoque.
-- [ ] **Subtarefa 6.4: Auditoria Contábil de Ponta a Ponta**
+- [x] **Subtarefa 6.4: Auditoria Contábil de Ponta a Ponta**
   - Prova matemática de reconciliação: $\sum \Delta_{\text{movements}} = \text{Product.current\_quantity}$.
   - Relatório final com cobertura consolidada $\ge 80\%$.
