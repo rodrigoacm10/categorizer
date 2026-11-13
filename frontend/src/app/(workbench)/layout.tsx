@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Boxes,
+  FolderTree,
   ArrowLeftRight,
   History,
   Users,
@@ -13,6 +14,8 @@ import {
 } from "lucide-react";
 import { TopBar } from "@/shared/components/TopBar";
 import { useTenant } from "@/features/tenants/hooks/useTenant";
+import { useRBAC } from "@/shared/hooks/useRBAC";
+import { ActionType } from "@/shared/types/rbac.types";
 import { storage } from "@/shared/lib/storage";
 import { cn } from "@/shared/utils/cn";
 
@@ -25,6 +28,7 @@ interface NavTab {
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   exact?: boolean;
+  requiredPermission?: ActionType;
 }
 
 const PRIMARY_NAV_TABS: NavTab[] = [
@@ -39,6 +43,13 @@ const PRIMARY_NAV_TABS: NavTab[] = [
     href: "/products",
     icon: Boxes,
     exact: false,
+  },
+  {
+    label: "Categorias",
+    href: "/categories",
+    icon: FolderTree,
+    exact: false,
+    requiredPermission: "view_categories",
   },
   {
     label: "Movimentações",
@@ -57,6 +68,7 @@ const PRIMARY_NAV_TABS: NavTab[] = [
     href: "/settings/members",
     icon: Users,
     exact: false,
+    requiredPermission: "view_members",
   },
 ];
 
@@ -64,6 +76,7 @@ export default function WorkbenchLayout({ children }: WorkbenchLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { tenantId, isLoading: isTenantLoading } = useTenant();
+  const { can } = useRBAC();
   const [isReady, setIsReady] = useState(false);
 
   // Verificação de autenticação e redirecionamento de tenant
@@ -122,6 +135,10 @@ export default function WorkbenchLayout({ children }: WorkbenchLayoutProps) {
           >
             <div className="flex items-center gap-1 h-full -mb-px">
               {PRIMARY_NAV_TABS.map((tab) => {
+                if (tab.requiredPermission && !can(tab.requiredPermission)) {
+                  return null;
+                }
+
                 const Icon = tab.icon;
                 const isActive = tab.exact
                   ? pathname === tab.href
