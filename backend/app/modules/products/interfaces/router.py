@@ -168,6 +168,7 @@ def create_product_endpoint(
     summary="Listar produtos do tenant",
 )
 def list_products_endpoint(
+    response: Response,
     category_id: Optional[List[str]] = Query(None),
     low_stock_only: bool = Query(False),
     search: Optional[str] = Query(None),
@@ -177,6 +178,31 @@ def list_products_endpoint(
     context: TenantContext = Depends(get_tenant_context),
     db: Session = Depends(get_db),
 ):
+    total_count = use_cases.count_products(
+        db=db,
+        tenant_id=context.tenant.id,
+        category_ids=category_id,
+        low_stock_only=low_stock_only,
+        search=search,
+        include_inactive=include_inactive,
+    )
+    import math
+    total_pages = math.ceil(total_count / limit) if limit > 0 else 1
+
+    response.headers["X-Total-Count"] = str(total_count)
+    response.headers["X-Total-Pages"] = str(total_pages)
+
+    expose = response.headers.get("Access-Control-Expose-Headers")
+    headers_to_expose = ["X-Total-Count", "X-Total-Pages"]
+    if expose:
+        parts = [p.strip() for p in expose.split(",")]
+        for h in headers_to_expose:
+            if h not in parts:
+                parts.append(h)
+        response.headers["Access-Control-Expose-Headers"] = ", ".join(parts)
+    else:
+        response.headers["Access-Control-Expose-Headers"] = ", ".join(headers_to_expose)
+
     return use_cases.list_products(
         db=db,
         tenant_id=context.tenant.id,
