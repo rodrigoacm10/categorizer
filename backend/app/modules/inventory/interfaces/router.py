@@ -17,6 +17,8 @@ from app.modules.inventory.application.dtos import (
     StockMovementResponseDto,
     ProductBalanceResponseDto,
     InventorySummaryResponseDto,
+    ProductDiscrepancyDto,
+    InventoryReconciliationReportDto,
     MovementTypeEnum,
 )
 from app.modules.inventory.application.use_cases import (
@@ -27,6 +29,8 @@ from app.modules.inventory.application.use_cases import (
     ExportStockMovementsUseCase,
     GetProductBalanceUseCase,
     GetInventorySummaryUseCase,
+    ReconcileInventoryUseCase,
+    reconcile_inventory,
     get_inventory_summary,
     process_stock_movement,
     get_product_ledger,
@@ -412,4 +416,22 @@ def get_inventory_summary_endpoint(
     uow = InventoryUnitOfWork(db)
     use_case = GetInventorySummaryUseCase(uow)
     return use_case.execute(tenant_id=context.tenant.id)
+
+
+@router.get("/reconciliation", response_model=InventoryReconciliationReportDto)
+def reconcile_inventory_endpoint(
+    context: TenantContext = Depends(require_roles(TenantRole.OWNER, TenantRole.GESTOR, TenantRole.AUDITOR)),
+    db: Session = Depends(get_db),
+):
+    """
+    Auditoria e reconciliação matemática do inventário do tenant.
+    Valida formalmente a equação contábil: current_quantity == sum(delta das movimentações) para todos os produtos.
+    Permitido para OWNER, GESTOR e AUDITOR.
+    Bloqueado para ALMOXARIFE com HTTP 403 Forbidden.
+    Protegido por isolamento multi-tenant estrito via TenantContext.
+    """
+    uow = InventoryUnitOfWork(db)
+    use_case = ReconcileInventoryUseCase(uow)
+    return use_case.execute(tenant_id=context.tenant.id)
+
 
