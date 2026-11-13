@@ -28,7 +28,7 @@ import { cn } from "@/shared/utils/cn";
  */
 export default function CategoriesPage() {
   const queryClient = useQueryClient();
-  const { tenantId, tenantName } = useTenant();
+  const { tenantId } = useTenant();
   const { can, role } = useRBAC();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -132,7 +132,7 @@ export default function CategoriesPage() {
             </h1>
             <span className="text-zinc-300 font-mono text-xs">//</span>
             <span className="text-xs font-mono text-zinc-500 uppercase tracking-wider">
-              {tenantName || "ALMOXARIFADO"}
+              {tenantId || "ALMOXARIFADO"}
             </span>
           </div>
           <p className="text-xs text-zinc-500">

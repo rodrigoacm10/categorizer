@@ -35,7 +35,7 @@ const PAGE_SIZE = 50;
  */
 export default function ProductsPage() {
   const queryClient = useQueryClient();
-  const { tenantId, tenantName } = useTenant();
+  const { tenantId } = useTenant();
   const { can } = useRBAC();
 
   const canCreate = can("create_product");
@@ -116,7 +116,7 @@ export default function ProductsPage() {
             </h1>
             <span className="text-zinc-300 font-mono text-xs">//</span>
             <span className="text-xs font-mono text-zinc-500 uppercase tracking-wider">
-              {tenantName || "ALMOXARIFADO"}
+              {tenantId || "ALMOXARIFADO"}
             </span>
           </div>
           <p className="text-xs text-zinc-500">
