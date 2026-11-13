@@ -9,9 +9,9 @@ import { MovementType } from "../types/inventory.types";
 import { Product } from "@/features/products/types/product.types";
 
 export interface UseStockSimulationParams {
-  currentQuantity: number | string | null | undefined;
+  currentQuantity?: number | string | null;
   movementType: MovementType | string;
-  quantityInput: number | string | null | undefined;
+  quantityInput?: number | string | null;
   targetProduct?: Product | null;
   unit?: string;
 }
@@ -69,12 +69,9 @@ export function useStockSimulation(
     // 1. Converte saldo atual para inteiro escalado
     let currentScaled = 0;
     try {
-      if (
-        currentQuantity === undefined &&
-        targetProduct?.current_quantity_scaled !== undefined
-      ) {
+      if (targetProduct?.current_quantity_scaled !== undefined) {
         currentScaled = targetProduct.current_quantity_scaled;
-      } else {
+      } else if (currentQuantity !== undefined && currentQuantity !== null) {
         currentScaled = toScaledInt(currentQuantity);
       }
     } catch {
