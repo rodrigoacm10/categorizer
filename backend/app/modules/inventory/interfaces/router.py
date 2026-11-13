@@ -338,6 +338,7 @@ def list_movements_endpoint(
 @router.get("/products/{product_id}/ledger", response_model=List[StockMovementResponseDto])
 def get_product_movements_endpoint(
     product_id: str,
+    response: Response,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     context: TenantContext = Depends(get_tenant_context),
@@ -355,6 +356,26 @@ def get_product_movements_endpoint(
                 detail="Produto não encontrado neste tenant.",
             )
         use_case = ListStockMovementsUseCase(uow)
+        total_count = use_case.count(
+            tenant_id=context.tenant.id,
+            product_id=product_id,
+        )
+        total_pages = math.ceil(total_count / limit) if limit > 0 else 1
+
+        response.headers["X-Total-Count"] = str(total_count)
+        response.headers["X-Total-Pages"] = str(total_pages)
+
+        expose = response.headers.get("Access-Control-Expose-Headers")
+        headers_to_expose = ["X-Total-Count", "X-Total-Pages"]
+        if expose:
+            parts = [p.strip() for p in expose.split(",")]
+            for h in headers_to_expose:
+                if h not in parts:
+                    parts.append(h)
+            response.headers["Access-Control-Expose-Headers"] = ", ".join(parts)
+        else:
+            response.headers["Access-Control-Expose-Headers"] = ", ".join(headers_to_expose)
+
         return use_case.execute(
             tenant_id=context.tenant.id,
             product_id=product_id,
