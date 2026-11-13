@@ -18,4 +18,23 @@ export const inventoryApi = {
     const endpoint = qs ? `/inventory/movements?${qs}` : "/inventory/movements";
     return api.get<StockMovement[]>(endpoint);
   },
+
+  /**
+   * Consulta o extrato individual perpétuo do Livro-Razão de um produto específico.
+   * Conforme FT-14 e backend router: GET /api/inventory/products/{product_id}/ledger
+   */
+  getProductLedger: async (
+    productId: string,
+    params?: { limit?: number; offset?: number }
+  ): Promise<StockMovement[]> => {
+    const query = new URLSearchParams();
+    if (params?.limit !== undefined) query.set("limit", params.limit.toString());
+    if (params?.offset !== undefined) query.set("offset", params.offset.toString());
+
+    const qs = query.toString();
+    const endpoint = qs
+      ? `/inventory/products/${productId}/ledger?${qs}`
+      : `/inventory/products/${productId}/ledger`;
+    return api.get<StockMovement[]>(endpoint);
+  },
 };
