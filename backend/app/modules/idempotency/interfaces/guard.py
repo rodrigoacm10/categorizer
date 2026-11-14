@@ -45,8 +45,18 @@ def check_or_start_idempotency(
     # 1. Caso com chave explícita do cliente
     if client_key:
         record = repo.get_by_key(tenant_id=tenant_id, key=client_key)
+        
+        # Em concorrência, se já está em processamento, aguarda brevemente pelo término da thread executora
+        if record and record.status == IdempotencyStatus.PROCESSING.value:
+            for _ in range(50):
+                time.sleep(0.05)
+                db.rollback()
+                record = repo.get_by_key(tenant_id=tenant_id, key=client_key)
+                if not record or record.status != IdempotencyStatus.PROCESSING.value:
+                    break
+
         if record:
-            # Operação em andamento
+            # Operação em andamento (ainda não concluída após espera)
             if record.status == IdempotencyStatus.PROCESSING.value:
                 raise IdempotencyProcessingError(
                     detail="Esta operação já está sendo processada no momento. Aguarde alguns instantes.",
@@ -81,13 +91,43 @@ def check_or_start_idempotency(
                 return client_key, {}
 
         # Chave nova: registrar como PROCESSING
-        repo.create(
-            key=client_key,
-            request_hash=request_hash,
-            endpoint=endpoint,
-            tenant_id=tenant_id,
-        )
-        return client_key, None
+        try:
+            repo.create(
+                key=client_key,
+                request_hash=request_hash,
+                endpoint=endpoint,
+                tenant_id=tenant_id,
+            )
+            return client_key, None
+        except Exception:
+            db.rollback()
+            # Concorrência detectada: outra thread acabou de inserir esta chave
+            for _ in range(50):
+                time.sleep(0.05)
+                db.rollback()
+                record = repo.get_by_key(tenant_id=tenant_id, key=client_key)
+                if record and record.status != IdempotencyStatus.PROCESSING.value:
+                    break
+
+            if record:
+                if record.status == IdempotencyStatus.PROCESSING.value:
+                    raise IdempotencyProcessingError(
+                        detail="Esta operação já está sendo processada no momento. Aguarde alguns instantes.",
+                        instance=endpoint,
+                    )
+                if record.request_hash != request_hash:
+                    raise IdempotencyConflictError(
+                        detail="Chave de Idempotência já utilizada com um payload diferente. Operação bloqueada pelo backend para evitar inconsistência.",
+                        instance=endpoint,
+                    )
+                if record.status in (IdempotencyStatus.COMPLETED.value, IdempotencyStatus.RESOLVED.value):
+                    if record.response_body:
+                        try:
+                            return client_key, json.loads(record.response_body)
+                        except Exception:
+                            return client_key, {"message": record.response_body}
+                    return client_key, {}
+            raise
 
     # 2. Caso sem chave explícita: Proteção semântica temporal (anti-duplo clique)
     recent = repo.find_recent_by_hash(

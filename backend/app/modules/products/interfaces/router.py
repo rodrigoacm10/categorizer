@@ -216,6 +216,31 @@ def list_products_endpoint(
 
 
 @router.get(
+    "/products/lookup",
+    response_model=ProductResponseDTO,
+    summary="Buscar produto por código de barras ou UUID",
+)
+def lookup_product_endpoint(
+    response: Response,
+    code: str = Query(
+        ...,
+        min_length=1,
+        description="UUID do produto ou código/nome exato escaneado pelo leitor de código de barras",
+    ),
+    context: TenantContext = Depends(
+        require_roles(
+            TenantRole.OWNER,
+            TenantRole.GESTOR,
+            TenantRole.ALMOXARIFE,
+            TenantRole.AUDITOR,
+        )
+    ),
+    db: Session = Depends(get_db),
+):
+    return use_cases.lookup_product(db=db, code=code, tenant_id=context.tenant.id)
+
+
+@router.get(
     "/products/{product_id}",
     response_model=ProductResponseDTO,
     summary="Obter produto por ID",
