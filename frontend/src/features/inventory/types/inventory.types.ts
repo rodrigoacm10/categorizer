@@ -13,6 +13,7 @@ export interface StockMovement {
   reason?: string | null;
   idempotency_key?: string | null;
   created_at: string;
+  is_replay?: boolean;
 }
 
 export interface ListMovementsParams {
@@ -22,4 +23,10 @@ export interface ListMovementsParams {
   end_date?: string;
   limit?: number;
   offset?: number;
+}
+
+export interface RegisterMovementPayload {
+  product_id: string;
+  quantity: number | string;
+  reason?: string;
 }
