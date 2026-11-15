@@ -30,17 +30,33 @@ export const inventoryApi = {
     let totalCount = 0;
     let totalPages = 1;
 
-    if (api.request) {
-      const res = await api.request<StockMovement[]>(endpoint, { method: "GET" });
-      items = res?.data || [];
-      const countHeader = res?.headers?.get?.("X-Total-Count");
-      const pagesHeader = res?.headers?.get?.("X-Total-Pages");
-      totalCount = countHeader ? parseInt(countHeader, 10) : items.length;
-      totalPages = pagesHeader
-        ? parseInt(pagesHeader, 10)
-        : params?.limit
-        ? Math.max(1, Math.ceil(totalCount / params.limit))
-        : 1;
+    if (typeof api.request === "function") {
+      try {
+        const res = await api.request<StockMovement[]>(endpoint, { method: "GET" });
+        if (res && res.data) {
+          items = res.data;
+          const countHeader = res.headers?.get?.("X-Total-Count");
+          const pagesHeader = res.headers?.get?.("X-Total-Pages");
+          totalCount = countHeader ? parseInt(countHeader, 10) : items.length;
+          totalPages = pagesHeader
+            ? parseInt(pagesHeader, 10)
+            : params?.limit
+            ? Math.max(1, Math.ceil(totalCount / params.limit))
+            : 1;
+        } else {
+          items = await api.get<StockMovement[]>(endpoint);
+          totalCount = items ? items.length : 0;
+          totalPages = params?.limit
+            ? Math.max(1, Math.ceil(totalCount / params.limit))
+            : 1;
+        }
+      } catch {
+        items = await api.get<StockMovement[]>(endpoint);
+        totalCount = items ? items.length : 0;
+        totalPages = params?.limit
+          ? Math.max(1, Math.ceil(totalCount / params.limit))
+          : 1;
+      }
     } else {
       items = await api.get<StockMovement[]>(endpoint);
       totalCount = items.length;

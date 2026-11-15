@@ -362,12 +362,13 @@ export const LedgerTable: React.FC<LedgerTableProps> = ({
         data-testid="ledger-pagination"
       >
         {/* Contador de Registros */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" data-testid="record-counter">
           <span>
             Exibindo{" "}
-            <strong className="text-zinc-950 font-semibold">{startRecord}</strong>-
-            <strong className="text-zinc-950 font-semibold">{endRecord}</strong> de{" "}
-            <strong className="text-zinc-950 font-semibold">{totalCount}</strong> lançamentos
+            <span className="text-zinc-950 font-semibold">
+              {startRecord}-{endRecord}
+            </span>{" "}
+            de <span className="text-zinc-950 font-semibold">{totalCount}</span> lançamentos
           </span>
         </div>
 
