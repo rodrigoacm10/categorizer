@@ -239,3 +239,40 @@ def remove_tenant_member(
 
     membership_repo.delete(membership)
     return {"message": "Membro removido com sucesso."}
+
+
+def get_tenant_member_by_id(db: Session, tenant_id: UUID, user_id: UUID) -> TenantMemberResponse:
+    membership_repo = SQLAlchemyMembershipRepository(db)
+    membership = membership_repo.get(user_id, tenant_id)
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Membro não encontrado no tenant.",
+        )
+    return TenantMemberResponse(
+        user_id=membership.user_id,
+        email=membership.user.email,
+        full_name=membership.user.full_name,
+        role=TenantRole(membership.role),
+        joined_at=membership.created_at,
+    )
+
+
+def leave_tenant(db: Session, tenant_id: UUID, user_id: UUID) -> dict:
+    membership_repo = SQLAlchemyMembershipRepository(db)
+    membership = membership_repo.get(user_id, tenant_id)
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Membro não encontrado no tenant.",
+        )
+
+    if membership.role == TenantRole.OWNER.value:
+        owner_count = membership_repo.count_owners(tenant_id)
+        if owner_count <= 1:
+            raise SoleOwnerRemovalError(
+                detail="Não é possível sair do tenant sendo o único OWNER remanescente."
+            )
+
+    membership_repo.delete(membership)
+    return {"message": "Saída do tenant realizada com sucesso."}
