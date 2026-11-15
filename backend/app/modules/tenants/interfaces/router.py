@@ -11,6 +11,7 @@ from app.modules.tenants.application.dtos import (
     TenantMemberAddRequest,
     TenantMemberUpdateRequest,
     TenantMemberResponse,
+    TenantMembersSummaryResponse,
 )
 from app.modules.tenants.application import use_cases
 from app.modules.tenants.domain.entities import TenantRole
@@ -54,6 +55,20 @@ def get_tenant_endpoint(
     if not membership:
         raise TenantAccessDeniedError(detail="Usuário não é membro deste tenant.")
     return use_cases.get_tenant_by_id(db, tenant_id)
+
+
+@router.get("/{tenant_id}/members/summary", response_model=TenantMembersSummaryResponse)
+def get_members_summary_endpoint(
+    tenant_id: UUID,
+    current_user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Retorna estatísticas consolidadas de membros por papel no tenant."""
+    membership_repo = SQLAlchemyMembershipRepository(db)
+    membership = membership_repo.get(current_user.id, tenant_id)
+    if not membership:
+        raise TenantAccessDeniedError(detail="Usuário não possui vínculo com este tenant.")
+    return use_cases.get_tenant_members_summary(db, tenant_id)
 
 
 @router.get("/{tenant_id}/members", response_model=List[TenantMemberResponse])
