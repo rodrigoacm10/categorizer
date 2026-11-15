@@ -40,3 +40,13 @@ class TenantMemberResponse(BaseModel):
     joined_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class TenantMembersSummaryResponse(BaseModel):
+    total_members: int
+    owners_count: int
+    gestores_count: int
+    almoxarifes_count: int
+    auditores_count: int
+
+    model_config = {"from_attributes": True}

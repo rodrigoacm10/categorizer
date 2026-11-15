@@ -1,3 +1,4 @@
+import math
 import re
 import unicodedata
 from typing import List, Optional
@@ -9,6 +10,7 @@ from app.modules.tenants.application.dtos import (
     TenantResponse,
     TenantMemberAddRequest,
     TenantMemberResponse,
+    TenantMembersSummaryResponse,
 )
 from app.modules.tenants.domain.entities import TenantRole
 from app.modules.tenants.infrastructure.models import TenantModel, TenantMembershipModel
@@ -80,6 +82,18 @@ def get_tenant_by_id(db: Session, tenant_id: UUID) -> TenantResponse:
     return TenantResponse.model_validate(tenant)
 
 
+def get_tenant_members_summary(db: Session, tenant_id: UUID) -> TenantMembersSummaryResponse:
+    membership_repo = SQLAlchemyMembershipRepository(db)
+    counts = membership_repo.get_role_counts(tenant_id)
+    return TenantMembersSummaryResponse(
+        total_members=counts["total_members"],
+        owners_count=counts["owners_count"],
+        gestores_count=counts["gestores_count"],
+        almoxarifes_count=counts["almoxarifes_count"],
+        auditores_count=counts["auditores_count"],
+    )
+
+
 def list_tenant_members(db: Session, tenant_id: UUID) -> List[TenantMemberResponse]:
     membership_repo = SQLAlchemyMembershipRepository(db)
     memberships = membership_repo.list_by_tenant(tenant_id)
@@ -96,6 +110,37 @@ def list_tenant_members(db: Session, tenant_id: UUID) -> List[TenantMemberRespon
             )
         )
     return result
+
+
+def list_tenant_members_paginated(
+    db: Session,
+    tenant_id: UUID,
+    role: Optional[TenantRole] = None,
+    search: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> tuple[List[TenantMemberResponse], int, int]:
+    membership_repo = SQLAlchemyMembershipRepository(db)
+    total_count = membership_repo.count_by_tenant(tenant_id, role=role, search=search)
+    total_pages = math.ceil(total_count / limit) if limit > 0 else 1
+    memberships = membership_repo.list_by_tenant_paginated(
+        tenant_id=tenant_id,
+        role=role,
+        search=search,
+        limit=limit,
+        offset=offset,
+    )
+    result = [
+        TenantMemberResponse(
+            user_id=m.user_id,
+            email=m.user.email,
+            full_name=m.user.full_name,
+            role=TenantRole(m.role),
+            joined_at=m.created_at,
+        )
+        for m in memberships
+    ]
+    return result, total_count, total_pages
 
 
 def add_tenant_member(
@@ -194,3 +239,40 @@ def remove_tenant_member(
 
     membership_repo.delete(membership)
     return {"message": "Membro removido com sucesso."}
+
+
+def get_tenant_member_by_id(db: Session, tenant_id: UUID, user_id: UUID) -> TenantMemberResponse:
+    membership_repo = SQLAlchemyMembershipRepository(db)
+    membership = membership_repo.get(user_id, tenant_id)
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Membro não encontrado no tenant.",
+        )
+    return TenantMemberResponse(
+        user_id=membership.user_id,
+        email=membership.user.email,
+        full_name=membership.user.full_name,
+        role=TenantRole(membership.role),
+        joined_at=membership.created_at,
+    )
+
+
+def leave_tenant(db: Session, tenant_id: UUID, user_id: UUID) -> dict:
+    membership_repo = SQLAlchemyMembershipRepository(db)
+    membership = membership_repo.get(user_id, tenant_id)
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Membro não encontrado no tenant.",
+        )
+
+    if membership.role == TenantRole.OWNER.value:
+        owner_count = membership_repo.count_owners(tenant_id)
+        if owner_count <= 1:
+            raise SoleOwnerRemovalError(
+                detail="Não é possível sair do tenant sendo o único OWNER remanescente."
+            )
+
+    membership_repo.delete(membership)
+    return {"message": "Saída do tenant realizada com sucesso."}

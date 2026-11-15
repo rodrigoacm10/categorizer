@@ -1,6 +1,6 @@
 from typing import List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, Header, status
+from fastapi import APIRouter, Depends, Header, Query, Response, status
 from sqlalchemy.orm import Session
 from app.shared.infrastructure.database import get_db
 from app.modules.auth.infrastructure.models import UserModel
@@ -11,6 +11,7 @@ from app.modules.tenants.application.dtos import (
     TenantMemberAddRequest,
     TenantMemberUpdateRequest,
     TenantMemberResponse,
+    TenantMembersSummaryResponse,
 )
 from app.modules.tenants.application import use_cases
 from app.modules.tenants.domain.entities import TenantRole
@@ -56,18 +57,61 @@ def get_tenant_endpoint(
     return use_cases.get_tenant_by_id(db, tenant_id)
 
 
-@router.get("/{tenant_id}/members", response_model=List[TenantMemberResponse])
-def list_members_endpoint(
+@router.get("/{tenant_id}/members/summary", response_model=TenantMembersSummaryResponse)
+def get_members_summary_endpoint(
     tenant_id: UUID,
     current_user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Lista todos os membros do tenant. Requer que o usuário seja membro do tenant."""
+    """Retorna estatísticas consolidadas de membros por papel no tenant."""
     membership_repo = SQLAlchemyMembershipRepository(db)
     membership = membership_repo.get(current_user.id, tenant_id)
     if not membership:
         raise TenantAccessDeniedError(detail="Usuário não possui vínculo com este tenant.")
-    return use_cases.list_tenant_members(db, tenant_id)
+    return use_cases.get_tenant_members_summary(db, tenant_id)
+
+
+@router.get("/{tenant_id}/members", response_model=List[TenantMemberResponse])
+def list_members_endpoint(
+    tenant_id: UUID,
+    response: Response,
+    role: Optional[TenantRole] = Query(None),
+    search: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    current_user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Lista membros do tenant com suporte a filtros, busca e paginação."""
+    membership_repo = SQLAlchemyMembershipRepository(db)
+    membership = membership_repo.get(current_user.id, tenant_id)
+    if not membership:
+        raise TenantAccessDeniedError(detail="Usuário não possui vínculo com este tenant.")
+
+    members, total_count, total_pages = use_cases.list_tenant_members_paginated(
+        db=db,
+        tenant_id=tenant_id,
+        role=role,
+        search=search,
+        limit=limit,
+        offset=offset,
+    )
+
+    response.headers["X-Total-Count"] = str(total_count)
+    response.headers["X-Total-Pages"] = str(total_pages)
+
+    expose = response.headers.get("Access-Control-Expose-Headers")
+    headers_to_expose = ["X-Total-Count", "X-Total-Pages"]
+    if expose:
+        parts = [p.strip() for p in expose.split(",")]
+        for h in headers_to_expose:
+            if h not in parts:
+                parts.append(h)
+        response.headers["Access-Control-Expose-Headers"] = ", ".join(parts)
+    else:
+        response.headers["Access-Control-Expose-Headers"] = ", ".join(headers_to_expose)
+
+    return members
 
 
 @router.post("/{tenant_id}/members", response_model=TenantMemberResponse, status_code=status.HTTP_201_CREATED)
@@ -127,3 +171,32 @@ def remove_member_endpoint(
         raise InsufficientPermissionsError(detail="Apenas OWNER pode remover membros do tenant.")
 
     return use_cases.remove_tenant_member(db, tenant_id, user_id)
+
+
+@router.get("/{tenant_id}/members/{user_id}", response_model=TenantMemberResponse)
+def get_member_by_id_endpoint(
+    tenant_id: UUID,
+    user_id: UUID,
+    current_user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Consulta detalhes de um membro específico do tenant. Requer que o solicitante seja membro do tenant."""
+    membership_repo = SQLAlchemyMembershipRepository(db)
+    membership = membership_repo.get(current_user.id, tenant_id)
+    if not membership:
+        raise TenantAccessDeniedError(detail="Usuário não possui vínculo com este tenant.")
+    return use_cases.get_tenant_member_by_id(db, tenant_id, user_id)
+
+
+@router.post("/{tenant_id}/leave")
+def leave_tenant_endpoint(
+    tenant_id: UUID,
+    current_user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Permite que o usuário autenticado saia voluntariamente do tenant. Bloqueia se for o único OWNER."""
+    membership_repo = SQLAlchemyMembershipRepository(db)
+    membership = membership_repo.get(current_user.id, tenant_id)
+    if not membership:
+        raise TenantAccessDeniedError(detail="Usuário não possui vínculo com este tenant.")
+    return use_cases.leave_tenant(db, tenant_id, current_user.id)
