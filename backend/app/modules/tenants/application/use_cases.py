@@ -9,6 +9,7 @@ from app.modules.tenants.application.dtos import (
     TenantResponse,
     TenantMemberAddRequest,
     TenantMemberResponse,
+    TenantMembersSummaryResponse,
 )
 from app.modules.tenants.domain.entities import TenantRole
 from app.modules.tenants.infrastructure.models import TenantModel, TenantMembershipModel
@@ -78,6 +79,18 @@ def get_tenant_by_id(db: Session, tenant_id: UUID) -> TenantResponse:
     if not tenant or not tenant.is_active:
         raise TenantNotFoundError()
     return TenantResponse.model_validate(tenant)
+
+
+def get_tenant_members_summary(db: Session, tenant_id: UUID) -> TenantMembersSummaryResponse:
+    membership_repo = SQLAlchemyMembershipRepository(db)
+    counts = membership_repo.get_role_counts(tenant_id)
+    return TenantMembersSummaryResponse(
+        total_members=counts["total_members"],
+        owners_count=counts["owners_count"],
+        gestores_count=counts["gestores_count"],
+        almoxarifes_count=counts["almoxarifes_count"],
+        auditores_count=counts["auditores_count"],
+    )
 
 
 def list_tenant_members(db: Session, tenant_id: UUID) -> List[TenantMemberResponse]:
