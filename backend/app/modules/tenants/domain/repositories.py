@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional, List
 from uuid import UUID
-from app.modules.tenants.domain.entities import Tenant, TenantMembership
+from app.modules.tenants.domain.entities import Tenant, TenantMembership, TenantRole
 
 
 class ITenantRepository(ABC):
@@ -37,4 +37,28 @@ class ITenantMembershipRepository(ABC):
 
     @abstractmethod
     def delete(self, user_id: UUID, tenant_id: UUID) -> bool:
+        pass
+
+    @abstractmethod
+    def list_by_tenant_paginated(
+        self,
+        tenant_id: UUID,
+        role: Optional[TenantRole] = None,
+        search: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[TenantMembership]:
+        pass
+
+    @abstractmethod
+    def count_by_tenant(
+        self,
+        tenant_id: UUID,
+        role: Optional[TenantRole] = None,
+        search: Optional[str] = None,
+    ) -> int:
+        pass
+
+    @abstractmethod
+    def get_role_counts(self, tenant_id: UUID) -> dict:
         pass
