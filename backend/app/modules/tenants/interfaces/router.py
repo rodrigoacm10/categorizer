@@ -1,6 +1,6 @@
 from typing import List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, Header, status
+from fastapi import APIRouter, Depends, Header, Query, Response, status
 from sqlalchemy.orm import Session
 from app.shared.infrastructure.database import get_db
 from app.modules.auth.infrastructure.models import UserModel
@@ -74,15 +74,44 @@ def get_members_summary_endpoint(
 @router.get("/{tenant_id}/members", response_model=List[TenantMemberResponse])
 def list_members_endpoint(
     tenant_id: UUID,
+    response: Response,
+    role: Optional[TenantRole] = Query(None),
+    search: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     current_user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Lista todos os membros do tenant. Requer que o usuário seja membro do tenant."""
+    """Lista membros do tenant com suporte a filtros, busca e paginação."""
     membership_repo = SQLAlchemyMembershipRepository(db)
     membership = membership_repo.get(current_user.id, tenant_id)
     if not membership:
         raise TenantAccessDeniedError(detail="Usuário não possui vínculo com este tenant.")
-    return use_cases.list_tenant_members(db, tenant_id)
+
+    members, total_count, total_pages = use_cases.list_tenant_members_paginated(
+        db=db,
+        tenant_id=tenant_id,
+        role=role,
+        search=search,
+        limit=limit,
+        offset=offset,
+    )
+
+    response.headers["X-Total-Count"] = str(total_count)
+    response.headers["X-Total-Pages"] = str(total_pages)
+
+    expose = response.headers.get("Access-Control-Expose-Headers")
+    headers_to_expose = ["X-Total-Count", "X-Total-Pages"]
+    if expose:
+        parts = [p.strip() for p in expose.split(",")]
+        for h in headers_to_expose:
+            if h not in parts:
+                parts.append(h)
+        response.headers["Access-Control-Expose-Headers"] = ", ".join(parts)
+    else:
+        response.headers["Access-Control-Expose-Headers"] = ", ".join(headers_to_expose)
+
+    return members
 
 
 @router.post("/{tenant_id}/members", response_model=TenantMemberResponse, status_code=status.HTTP_201_CREATED)
