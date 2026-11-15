@@ -1,12 +1,20 @@
 import { api } from "@/shared/lib/api-client";
-import { StockMovement, ListMovementsParams, RegisterMovementPayload } from "../types/inventory.types";
+import { storage } from "@/shared/lib/storage";
+import {
+  StockMovement,
+  ListMovementsParams,
+  PaginatedStockMovements,
+  RegisterMovementPayload,
+} from "../types/inventory.types";
 import { Product } from "@/features/products/types/product.types";
 
 export const inventoryApi = {
   /**
-   * Consulta o extrato de movimentações físicas do almoxarifado ativo.
+   * Consulta o extrato de movimentações físicas do almoxarifado ativo com paginação e metadados.
    */
-  listMovements: async (params?: ListMovementsParams): Promise<StockMovement[]> => {
+  listMovements: async (
+    params?: ListMovementsParams
+  ): Promise<PaginatedStockMovements> => {
     const query = new URLSearchParams();
     if (params?.product_id) query.set("product_id", params.product_id);
     if (params?.type) query.set("type", params.type);
@@ -17,7 +25,135 @@ export const inventoryApi = {
 
     const qs = query.toString();
     const endpoint = qs ? `/inventory/movements?${qs}` : "/inventory/movements";
-    return api.get<StockMovement[]>(endpoint);
+
+    let items: StockMovement[] = [];
+    let totalCount = 0;
+    let totalPages = 1;
+
+    if (typeof api.request === "function") {
+      try {
+        const res = await api.request<StockMovement[]>(endpoint, { method: "GET" });
+        if (res && res.data) {
+          items = res.data;
+          const countHeader = res.headers?.get?.("X-Total-Count");
+          const pagesHeader = res.headers?.get?.("X-Total-Pages");
+          totalCount = countHeader ? parseInt(countHeader, 10) : items.length;
+          totalPages = pagesHeader
+            ? parseInt(pagesHeader, 10)
+            : params?.limit
+            ? Math.max(1, Math.ceil(totalCount / params.limit))
+            : 1;
+        } else {
+          items = await api.get<StockMovement[]>(endpoint);
+          totalCount = items ? items.length : 0;
+          totalPages = params?.limit
+            ? Math.max(1, Math.ceil(totalCount / params.limit))
+            : 1;
+        }
+      } catch {
+        items = await api.get<StockMovement[]>(endpoint);
+        totalCount = items ? items.length : 0;
+        totalPages = params?.limit
+          ? Math.max(1, Math.ceil(totalCount / params.limit))
+          : 1;
+      }
+    } else {
+      items = await api.get<StockMovement[]>(endpoint);
+      totalCount = items.length;
+      totalPages = params?.limit
+        ? Math.max(1, Math.ceil(totalCount / params.limit))
+        : 1;
+    }
+
+    const paginatedList = [...items] as PaginatedStockMovements;
+    paginatedList.items = items;
+    paginatedList.totalCount = totalCount;
+    paginatedList.totalPages = totalPages;
+
+    return paginatedList;
+  },
+
+  /**
+   * Aciona o download do CSV via GET /api/inventory/movements/export com token de autenticação e cabeçalho X-Tenant-ID.
+   */
+  exportMovementsCsv: async (
+    params?: ListMovementsParams,
+    tenantSlug?: string
+  ): Promise<{ blob: Blob; filename: string }> => {
+    const query = new URLSearchParams();
+    if (params?.product_id) query.set("product_id", params.product_id);
+    if (params?.type) query.set("type", params.type);
+    if (params?.start_date) query.set("start_date", params.start_date);
+    if (params?.end_date) query.set("end_date", params.end_date);
+
+    const token = storage.getToken();
+    const activeTenantId = storage.getActiveTenantId();
+
+    if (!activeTenantId) {
+      throw new Error(
+        "Tenant ativo não selecionado. A exportação requer contexto de almoxarifado."
+      );
+    }
+
+    const headers: Record<string, string> = {
+      "X-Tenant-ID": activeTenantId,
+    };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const qs = query.toString();
+    const endpoint = qs
+      ? `/inventory/movements/export?${qs}`
+      : "/inventory/movements/export";
+
+    const apiBase =
+      process.env.NEXT_PUBLIC_API_URL ||
+      (typeof window !== "undefined" ? "/api" : "http://127.0.0.1:8000/api");
+    const base = apiBase.endsWith("/") ? apiBase.slice(0, -1) : apiBase;
+    const path = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+    const url = `${base}${path}`;
+
+    const res = await fetch(url, {
+      method: "GET",
+      headers,
+    });
+
+    if (!res.ok) {
+      throw new Error(
+        `Falha ao exportar extrato CSV: ${res.statusText || res.status}`
+      );
+    }
+
+    let filename = "";
+    const disposition = res.headers.get("Content-Disposition");
+    if (disposition && disposition.includes("filename=")) {
+      const match = disposition.match(/filename=["']?([^"';]+)["']?/);
+      if (match && match[1]) {
+        filename = match[1].trim();
+      }
+    }
+
+    if (!filename) {
+      const today = new Date().toISOString().split("T")[0];
+      const slug = tenantSlug || activeTenantId;
+      filename = `extrato-estoque-${slug}-${today}.csv`;
+    }
+
+    const blob = await res.blob();
+
+    if (typeof window !== "undefined" && typeof document !== "undefined") {
+      const objectUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(objectUrl);
+    }
+
+    return { blob, filename };
   },
 
   /**

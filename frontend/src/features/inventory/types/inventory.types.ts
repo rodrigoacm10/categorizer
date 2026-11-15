@@ -1,4 +1,4 @@
-export type MovementType = "IN" | "OUT" | "ADJUSTMENT";
+export type MovementType = "IN" | "OUT" | "ADJUSTMENT" | "PRODUCT_DELETED";
 
 export interface StockMovement {
   id: string;
@@ -23,6 +23,12 @@ export interface ListMovementsParams {
   end_date?: string;
   limit?: number;
   offset?: number;
+}
+
+export interface PaginatedStockMovements extends Array<StockMovement> {
+  items: StockMovement[];
+  totalCount: number;
+  totalPages: number;
 }
 
 export interface RegisterMovementPayload {

@@ -12,4 +12,5 @@ export interface ApiResponse<T> {
   isCached: boolean;
   idempotencyKey?: string;
   status: number;
+  headers?: Headers;
 }

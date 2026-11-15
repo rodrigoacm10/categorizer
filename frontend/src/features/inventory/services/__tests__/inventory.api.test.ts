@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { inventoryApi } from "../inventory.api";
 import { api } from "@/shared/lib/api-client";
+import { storage } from "@/shared/lib/storage";
 import { StockMovement } from "../../types/inventory.types";
 import { Product } from "@/features/products/types/product.types";
 
@@ -8,6 +9,14 @@ vi.mock("@/shared/lib/api-client", () => ({
   api: {
     get: vi.fn(),
     post: vi.fn(),
+    request: vi.fn(),
+  },
+}));
+
+vi.mock("@/shared/lib/storage", () => ({
+  storage: {
+    getToken: vi.fn(),
+    getActiveTenantId: vi.fn(),
   },
 }));
 
@@ -188,5 +197,83 @@ describe("inventoryApi", () => {
     await expect(inventoryApi.lookupProduct("   ")).rejects.toThrow(
       "Código do produto não pode ser vazio."
     );
+  });
+
+  it("listMovements() extrai X-Total-Count e X-Total-Pages quando api.request retornar cabeçalhos", async () => {
+    const headers = new Headers();
+    headers.set("X-Total-Count", "150");
+    headers.set("X-Total-Pages", "3");
+
+    (api as any).request = vi.fn().mockResolvedValueOnce({
+      data: [mockMovement],
+      isCached: false,
+      status: 200,
+      headers,
+    });
+
+    const result = await inventoryApi.listMovements({ limit: 50, offset: 0 });
+
+    expect(result.totalCount).toBe(150);
+    expect(result.totalPages).toBe(3);
+    expect(result.items).toHaveLength(1);
+    expect(result).toHaveLength(1);
+
+    (api as any).request = undefined;
+  });
+
+  it("exportMovementsCsv() lança erro quando activeTenantId não estiver configurado", async () => {
+    vi.mocked(storage.getActiveTenantId).mockReturnValueOnce(null);
+
+    await expect(inventoryApi.exportMovementsCsv()).rejects.toThrow(
+      "Tenant ativo não selecionado. A exportação requer contexto de almoxarifado."
+    );
+  });
+
+  it("exportMovementsCsv() envia Authorization e X-Tenant-ID via fetch e dispara download", async () => {
+    vi.mocked(storage.getActiveTenantId).mockReturnValue("tenant-uuid-123");
+    vi.mocked(storage.getToken).mockReturnValue("fake-jwt-token");
+
+    const mockBlob = new Blob(["id,product\n1,prod"], { type: "text/csv" });
+    const originalFetch = global.fetch;
+    const mockHeaders = new Headers();
+    mockHeaders.set("Content-Disposition", 'attachment; filename="extrato-estoque-demo-2026-11-15.csv"');
+
+    global.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: mockHeaders,
+      blob: vi.fn().mockResolvedValueOnce(mockBlob),
+    });
+
+    // Mock URL.createObjectURL, revokeObjectURL and anchor click to avoid jsdom navigation warning
+    const originalCreateObjectURL = window.URL.createObjectURL;
+    const originalRevokeObjectURL = window.URL.revokeObjectURL;
+    const originalClick = HTMLAnchorElement.prototype.click;
+    window.URL.createObjectURL = vi.fn().mockReturnValue("blob:http://localhost/1234");
+    window.URL.revokeObjectURL = vi.fn();
+    HTMLAnchorElement.prototype.click = vi.fn();
+
+    const { blob, filename } = await inventoryApi.exportMovementsCsv(
+      { type: "IN", start_date: "2026-11-01" },
+      "demo"
+    );
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/inventory/movements/export?type=IN&start_date=2026-11-01"),
+      expect.objectContaining({
+        method: "GET",
+        headers: {
+          "X-Tenant-ID": "tenant-uuid-123",
+          Authorization: "Bearer fake-jwt-token",
+        },
+      })
+    );
+    expect(filename).toBe("extrato-estoque-demo-2026-11-15.csv");
+    expect(blob).toBe(mockBlob);
+
+    global.fetch = originalFetch;
+    window.URL.createObjectURL = originalCreateObjectURL;
+    window.URL.revokeObjectURL = originalRevokeObjectURL;
+    HTMLAnchorElement.prototype.click = originalClick;
   });
 });
