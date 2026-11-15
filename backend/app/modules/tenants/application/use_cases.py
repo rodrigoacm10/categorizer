@@ -1,3 +1,4 @@
+import math
 import re
 import unicodedata
 from typing import List, Optional
@@ -109,6 +110,37 @@ def list_tenant_members(db: Session, tenant_id: UUID) -> List[TenantMemberRespon
             )
         )
     return result
+
+
+def list_tenant_members_paginated(
+    db: Session,
+    tenant_id: UUID,
+    role: Optional[TenantRole] = None,
+    search: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> tuple[List[TenantMemberResponse], int, int]:
+    membership_repo = SQLAlchemyMembershipRepository(db)
+    total_count = membership_repo.count_by_tenant(tenant_id, role=role, search=search)
+    total_pages = math.ceil(total_count / limit) if limit > 0 else 1
+    memberships = membership_repo.list_by_tenant_paginated(
+        tenant_id=tenant_id,
+        role=role,
+        search=search,
+        limit=limit,
+        offset=offset,
+    )
+    result = [
+        TenantMemberResponse(
+            user_id=m.user_id,
+            email=m.user.email,
+            full_name=m.user.full_name,
+            role=TenantRole(m.role),
+            joined_at=m.created_at,
+        )
+        for m in memberships
+    ]
+    return result, total_count, total_pages
 
 
 def add_tenant_member(
