@@ -171,3 +171,32 @@ def remove_member_endpoint(
         raise InsufficientPermissionsError(detail="Apenas OWNER pode remover membros do tenant.")
 
     return use_cases.remove_tenant_member(db, tenant_id, user_id)
+
+
+@router.get("/{tenant_id}/members/{user_id}", response_model=TenantMemberResponse)
+def get_member_by_id_endpoint(
+    tenant_id: UUID,
+    user_id: UUID,
+    current_user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Consulta detalhes de um membro específico do tenant. Requer que o solicitante seja membro do tenant."""
+    membership_repo = SQLAlchemyMembershipRepository(db)
+    membership = membership_repo.get(current_user.id, tenant_id)
+    if not membership:
+        raise TenantAccessDeniedError(detail="Usuário não possui vínculo com este tenant.")
+    return use_cases.get_tenant_member_by_id(db, tenant_id, user_id)
+
+
+@router.post("/{tenant_id}/leave")
+def leave_tenant_endpoint(
+    tenant_id: UUID,
+    current_user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Permite que o usuário autenticado saia voluntariamente do tenant. Bloqueia se for o único OWNER."""
+    membership_repo = SQLAlchemyMembershipRepository(db)
+    membership = membership_repo.get(current_user.id, tenant_id)
+    if not membership:
+        raise TenantAccessDeniedError(detail="Usuário não possui vínculo com este tenant.")
+    return use_cases.leave_tenant(db, tenant_id, current_user.id)
