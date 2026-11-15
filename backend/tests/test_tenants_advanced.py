@@ -229,3 +229,137 @@ def test_list_members_search_by_name_and_email(client):
     assert len(res_none.json()) == 0
     assert res_none.headers["X-Total-Count"] == "0"
 
+
+def test_get_tenant_member_by_id_success_and_errors(client):
+    """Testa consulta de membro específico por user_id e casos de erro (404 e 403)."""
+    tenant = client.post("/api/tenants", json={"name": "Tenant Consulta Membro", "slug": "tenant-consulta-membro"}).json()
+    tenant_id = tenant["id"]
+
+    reg_user = client.post("/api/auth/register", json={
+        "email": "membro.especifico@empresa.com",
+        "password": "SenhaSegura123",
+        "full_name": "Membro Especifico",
+    }).json()
+    user_id = reg_user["id"]
+
+    client.post(f"/api/tenants/{tenant_id}/members", json={
+        "email": "membro.especifico@empresa.com",
+        "role": "ALMOXARIFE",
+    })
+
+    # Consulta com sucesso
+    res = client.get(f"/api/tenants/{tenant_id}/members/{user_id}")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["user_id"] == user_id
+    assert data["email"] == "membro.especifico@empresa.com"
+    assert data["full_name"] == "Membro Especifico"
+    assert data["role"] == "ALMOXARIFE"
+    assert "joined_at" in data
+
+    # Consulta ID inexistente -> 404
+    fake_id = str(uuid4())
+    res_404 = client.get(f"/api/tenants/{tenant_id}/members/{fake_id}")
+    assert res_404.status_code == 404
+    assert "Membro não encontrado" in res_404.json()["detail"]
+
+    # Consulta por usuário não membro -> 403
+    reg_intruso = client.post("/api/auth/register", json={
+        "email": "intruso.consulta@empresa.com",
+        "password": "SenhaSegura123",
+        "full_name": "Intruso Consulta",
+    }).json()
+    token_intruso = create_access_token({"sub": reg_intruso["id"], "email": reg_intruso["email"]})
+    res_403 = client.get(
+        f"/api/tenants/{tenant_id}/members/{user_id}",
+        headers={"Authorization": f"Bearer {token_intruso}"},
+    )
+    assert res_403.status_code == 403
+    assert res_403.json()["type"] == "https://api.estoque.local/errors/tenant-access-denied"
+
+
+def test_leave_tenant_regular_member_success(client):
+    """Testa saída voluntária de membro regular do tenant com sucesso."""
+    tenant = client.post("/api/tenants", json={"name": "Tenant Saida Regular", "slug": "tenant-saida-reg"}).json()
+    tenant_id = tenant["id"]
+
+    reg_membro = client.post("/api/auth/register", json={
+        "email": "saida.voluntaria@empresa.com",
+        "password": "SenhaSegura123",
+        "full_name": "Membro Que Vai Sair",
+    }).json()
+    membro_id = reg_membro["id"]
+
+    client.post(f"/api/tenants/{tenant_id}/members", json={
+        "email": "saida.voluntaria@empresa.com",
+        "role": "ALMOXARIFE",
+    })
+
+    # Membro se autentica e chama leave
+    token_membro = create_access_token({"sub": membro_id, "email": reg_membro["email"]})
+    res_leave = client.post(
+        f"/api/tenants/{tenant_id}/leave",
+        headers={"Authorization": f"Bearer {token_membro}"},
+    )
+    assert res_leave.status_code == 200
+    assert "sucesso" in res_leave.json()["message"]
+
+    # Membro agora não possui mais acesso ao tenant -> 403
+    res_check = client.get(
+        f"/api/tenants/{tenant_id}/members",
+        headers={"Authorization": f"Bearer {token_membro}"},
+    )
+    assert res_check.status_code == 403
+
+
+def test_leave_tenant_sole_owner_blocked(client):
+    """Testa bloqueio estrito de saída voluntária do único OWNER remanescente (422 RFC 7807)."""
+    tenant = client.post("/api/tenants", json={"name": "Tenant Sole Owner", "slug": "tenant-sole-owner"}).json()
+    tenant_id = tenant["id"]
+
+    # Default user é o único OWNER deste tenant
+    res_leave = client.post(f"/api/tenants/{tenant_id}/leave")
+    assert res_leave.status_code == 422
+    err = res_leave.json()
+    assert err["type"] == "https://api.estoque.local/errors/sole-owner-removal"
+    assert "único OWNER" in err["detail"]
+
+
+def test_leave_tenant_owner_when_multiple_owners_exist(client):
+    """Testa saída de um OWNER com sucesso quando existe outro OWNER."""
+    tenant = client.post("/api/tenants", json={"name": "Tenant Multi Owner", "slug": "tenant-multi-owner"}).json()
+    tenant_id = tenant["id"]
+
+    # Cadastra e adiciona segundo usuário como OWNER
+    reg_owner2 = client.post("/api/auth/register", json={
+        "email": "segundo.owner@empresa.com",
+        "password": "SenhaSegura123",
+        "full_name": "Segundo Owner",
+    }).json()
+    owner2_id = reg_owner2["id"]
+
+    # Owner inicial adiciona segundo usuário inicialmente como Almoxarife e promove para OWNER
+    client.post(f"/api/tenants/{tenant_id}/members", json={
+        "email": "segundo.owner@empresa.com",
+        "role": "ALMOXARIFE",
+    })
+    client.put(f"/api/tenants/{tenant_id}/members/{owner2_id}", json={
+        "role": "OWNER",
+    })
+
+    # Agora existem 2 OWNERS. O segundo OWNER chama leave
+    token_owner2 = create_access_token({"sub": owner2_id, "email": reg_owner2["email"]})
+    res_leave = client.post(
+        f"/api/tenants/{tenant_id}/leave",
+        headers={"Authorization": f"Bearer {token_owner2}"},
+    )
+    assert res_leave.status_code == 200
+    assert "sucesso" in res_leave.json()["message"]
+
+    # O owner inicial continua com acesso e summary mostra 1 owner
+    res_summary = client.get(f"/api/tenants/{tenant_id}/members/summary")
+    assert res_summary.status_code == 200
+    assert res_summary.json()["owners_count"] == 1
+    assert res_summary.json()["total_members"] == 1
+
+
