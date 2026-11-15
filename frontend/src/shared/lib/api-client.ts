@@ -201,6 +201,7 @@ export async function request<T>(
     isCached,
     idempotencyKey: returnedKey,
     status: res.status,
+    headers: res.headers,
   };
 }
 
