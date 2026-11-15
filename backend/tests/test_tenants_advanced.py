@@ -90,3 +90,142 @@ def test_tenant_members_summary_access_denied_for_non_member(client):
     )
     assert res.status_code == 403
     assert res.json()["type"] == "https://api.estoque.local/errors/tenant-access-denied"
+
+
+def test_list_members_paginated_headers(client):
+    """Testa listagem paginada com injeção dos headers X-Total-Count, X-Total-Pages e Access-Control-Expose-Headers."""
+    tenant = client.post("/api/tenants", json={"name": "Tenant Paginacao", "slug": "tenant-paginacao"}).json()
+    tenant_id = tenant["id"]
+
+    # Cadastra mais 4 membros (totalizando 5 membros com o OWNER)
+    for i in range(1, 5):
+        client.post("/api/auth/register", json={
+            "email": f"operador{i}@paginacao.com",
+            "password": "SenhaSegura123",
+            "full_name": f"Operador {i}",
+        })
+        client.post(f"/api/tenants/{tenant_id}/members", json={
+            "email": f"operador{i}@paginacao.com",
+            "role": "ALMOXARIFE",
+        })
+
+    # Consulta página 1 com limit=2, offset=0
+    res_p1 = client.get(f"/api/tenants/{tenant_id}/members?limit=2&offset=0")
+    assert res_p1.status_code == 200
+    assert len(res_p1.json()) == 2
+    assert res_p1.headers["X-Total-Count"] == "5"
+    assert res_p1.headers["X-Total-Pages"] == "3"
+    assert "X-Total-Count" in res_p1.headers["Access-Control-Expose-Headers"]
+    assert "X-Total-Pages" in res_p1.headers["Access-Control-Expose-Headers"]
+
+    # Consulta página 2 com limit=2, offset=2
+    res_p2 = client.get(f"/api/tenants/{tenant_id}/members?limit=2&offset=2")
+    assert res_p2.status_code == 200
+    assert len(res_p2.json()) == 2
+    assert res_p2.headers["X-Total-Count"] == "5"
+
+    # Consulta página 3 com limit=2, offset=4
+    res_p3 = client.get(f"/api/tenants/{tenant_id}/members?limit=2&offset=4")
+    assert res_p3.status_code == 200
+    assert len(res_p3.json()) == 1
+    assert res_p3.headers["X-Total-Count"] == "5"
+
+
+def test_list_members_filter_by_role(client):
+    """Testa filtro por papel (role=ALMOXARIFE, role=GESTOR)."""
+    tenant = client.post("/api/tenants", json={"name": "Tenant Filtro Role", "slug": "tenant-filtro-role"}).json()
+    tenant_id = tenant["id"]
+
+    client.post("/api/auth/register", json={
+        "email": "gestor@filtro.com",
+        "password": "SenhaSegura123",
+        "full_name": "Gestor Filtro",
+    })
+    client.post(f"/api/tenants/{tenant_id}/members", json={
+        "email": "gestor@filtro.com",
+        "role": "GESTOR",
+    })
+
+    client.post("/api/auth/register", json={
+        "email": "almoxarife@filtro.com",
+        "password": "SenhaSegura123",
+        "full_name": "Almoxarife Filtro",
+    })
+    client.post(f"/api/tenants/{tenant_id}/members", json={
+        "email": "almoxarife@filtro.com",
+        "role": "ALMOXARIFE",
+    })
+
+    # Filtro role=ALMOXARIFE
+    res_almox = client.get(f"/api/tenants/{tenant_id}/members?role=ALMOXARIFE")
+    assert res_almox.status_code == 200
+    members_almox = res_almox.json()
+    assert len(members_almox) == 1
+    assert members_almox[0]["role"] == "ALMOXARIFE"
+    assert members_almox[0]["email"] == "almoxarife@filtro.com"
+    assert res_almox.headers["X-Total-Count"] == "1"
+
+    # Filtro role=GESTOR
+    res_gestor = client.get(f"/api/tenants/{tenant_id}/members?role=GESTOR")
+    assert res_gestor.status_code == 200
+    members_gestor = res_gestor.json()
+    assert len(members_gestor) == 1
+    assert members_gestor[0]["role"] == "GESTOR"
+    assert members_gestor[0]["email"] == "gestor@filtro.com"
+    assert res_gestor.headers["X-Total-Count"] == "1"
+
+    # Filtro role=AUDITOR (nenhum membro)
+    res_auditor = client.get(f"/api/tenants/{tenant_id}/members?role=AUDITOR")
+    assert res_auditor.status_code == 200
+    assert len(res_auditor.json()) == 0
+    assert res_auditor.headers["X-Total-Count"] == "0"
+    assert res_auditor.headers["X-Total-Pages"] == "0" or res_auditor.headers["X-Total-Pages"] == "1"
+
+
+def test_list_members_search_by_name_and_email(client):
+    """Testa busca textual por email ou nome (search=...)."""
+    tenant = client.post("/api/tenants", json={"name": "Tenant Busca", "slug": "tenant-busca"}).json()
+    tenant_id = tenant["id"]
+
+    client.post("/api/auth/register", json={
+        "email": "carlos.silva@empresa.com",
+        "password": "SenhaSegura123",
+        "full_name": "Carlos Alberto da Silva",
+    })
+    client.post(f"/api/tenants/{tenant_id}/members", json={
+        "email": "carlos.silva@empresa.com",
+        "role": "ALMOXARIFE",
+    })
+
+    client.post("/api/auth/register", json={
+        "email": "mariana.oliveira@empresa.com",
+        "password": "SenhaSegura123",
+        "full_name": "Mariana Souza",
+    })
+    client.post(f"/api/tenants/{tenant_id}/members", json={
+        "email": "mariana.oliveira@empresa.com",
+        "role": "AUDITOR",
+    })
+
+    # Busca por parte do nome 'alberto'
+    res_nome = client.get(f"/api/tenants/{tenant_id}/members?search=alberto")
+    assert res_nome.status_code == 200
+    results_nome = res_nome.json()
+    assert len(results_nome) == 1
+    assert results_nome[0]["email"] == "carlos.silva@empresa.com"
+    assert res_nome.headers["X-Total-Count"] == "1"
+
+    # Busca por parte do email 'mariana.oliveira'
+    res_email = client.get(f"/api/tenants/{tenant_id}/members?search=mariana.oliveira")
+    assert res_email.status_code == 200
+    results_email = res_email.json()
+    assert len(results_email) == 1
+    assert results_email[0]["full_name"] == "Mariana Souza"
+    assert res_email.headers["X-Total-Count"] == "1"
+
+    # Busca sem correspondência
+    res_none = client.get(f"/api/tenants/{tenant_id}/members?search=termo_inexistente_xyz")
+    assert res_none.status_code == 200
+    assert len(res_none.json()) == 0
+    assert res_none.headers["X-Total-Count"] == "0"
+
