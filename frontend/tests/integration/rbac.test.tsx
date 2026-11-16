@@ -461,4 +461,58 @@ describe("FT-22: Suíte de Homologação de RBAC e Matriz de Acesso Visual/Opera
     });
   });
 
+  describe("4. Bancada Operacional de Movimentação Física (MovementForm)", () => {
+    it("bloqueia abas de Entrada (+) e Saída (-) para AUDITOR com banner informativo de somente-leitura", async () => {
+      renderWithRole(<MovementForm initialProductId="p-101" />, "AUDITOR");
+
+      await waitFor(() => {
+        expect(screen.getByText("Parafuso Sextavado M8")).toBeDefined();
+      });
+
+      // Aba IN ativa por padrão -> deve exibir banner de permissão insuficiente
+      expect(screen.getByTestId("permission-warning-banner")).toBeDefined();
+      expect(
+        screen.getByText(/O perfil AUDITOR possui acesso somente-leitura e não tem autorização para registrar entradas físicas/i)
+      ).toBeDefined();
+
+      // Botão de submissão desabilitado
+      const submitBtn = screen.getByTestId("submit-movement-button");
+      expect(submitBtn.hasAttribute("disabled")).toBe(true);
+
+      // Troca para aba Saída (-)
+      const outTab = screen.getByRole("tab", { name: /saída/i });
+      fireEvent.click(outTab);
+
+      expect(screen.getByTestId("permission-warning-banner")).toBeDefined();
+      expect(
+        screen.getByText(/O perfil AUDITOR possui acesso somente-leitura e não tem autorização para registrar saídas físicas/i)
+      ).toBeDefined();
+      expect(screen.getByTestId("submit-movement-button").hasAttribute("disabled")).toBe(true);
+
+      // Troca para aba Ajuste Contábil -> PERMITIDO para AUDITOR!
+      const adjTab = screen.getByRole("tab", { name: /ajuste/i });
+      fireEvent.click(adjTab);
+
+      expect(screen.queryByTestId("permission-warning-banner")).toBeNull();
+    });
+
+    it("permite operação completa de Entrada (+), Saída (-) e Ajuste para ALMOXARIFE", async () => {
+      renderWithRole(<MovementForm initialProductId="p-101" />, "ALMOXARIFE");
+
+      await waitFor(() => {
+        expect(screen.getByText("Parafuso Sextavado M8")).toBeDefined();
+      });
+
+      expect(screen.queryByTestId("permission-warning-banner")).toBeNull();
+
+      const outTab = screen.getByRole("tab", { name: /saída/i });
+      fireEvent.click(outTab);
+      expect(screen.queryByTestId("permission-warning-banner")).toBeNull();
+
+      const adjTab = screen.getByRole("tab", { name: /ajuste/i });
+      fireEvent.click(adjTab);
+      expect(screen.queryByTestId("permission-warning-banner")).toBeNull();
+    });
+  });
+
 });
