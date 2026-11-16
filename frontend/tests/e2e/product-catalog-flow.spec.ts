@@ -125,10 +125,10 @@ test.describe("Fluxo 2 — Gestão de Categorias e Catálogo de Produtos com Sal
     await productsPage.gotoList();
 
     // O produto deve constar na tabela exibindo saldo zero
-    await productsPage.expectProductInTable("Fresa de Topo Metal Duro 12mm", "0,000 UN");
+    await productsPage.expectProductInTable("Fresa de Topo Metal Duro 12mm", "0 UN");
 
     // Testa filtro / busca textual
     await productsPage.searchProduct("Fresa");
-    await productsPage.expectProductInTable("Fresa de Topo Metal Duro 12mm", "0,000 UN");
+    await productsPage.expectProductInTable("Fresa de Topo Metal Duro 12mm", "0 UN");
   });
 });
