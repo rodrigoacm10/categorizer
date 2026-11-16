@@ -112,7 +112,7 @@ export class MockStateStore {
   // --- Auth & Users ---
   public registerUser(full_name: string, email: string, password: string): MockUser {
     const normalizedEmail = email.toLowerCase().trim();
-    for (const u of this.users.values()) {
+    for (const u of Array.from(this.users.values())) {
       if (u.email === normalizedEmail) {
         throw { status: 409, type: "email-already-exists", detail: "Este e-mail já está cadastrado no sistema." };
       }
@@ -130,7 +130,7 @@ export class MockStateStore {
 
   public loginUser(email: string, password: string): { user: MockUser; access_token: string } {
     const normalizedEmail = email.toLowerCase().trim();
-    for (const u of this.users.values()) {
+    for (const u of Array.from(this.users.values())) {
       if (u.email === normalizedEmail && u.password_hash === `hash_${password}`) {
         return {
           user: u,
@@ -148,7 +148,7 @@ export class MockStateStore {
   // --- Tenants ---
   public createTenant(name: string, slug: string, description: string | undefined, userId: string): MockTenant {
     const normalizedSlug = slug.toLowerCase().trim();
-    for (const t of this.tenants.values()) {
+    for (const t of Array.from(this.tenants.values())) {
       if (t.slug === normalizedSlug) {
         throw { status: 409, type: "slug-already-exists", detail: "Slug já cadastrado no sistema." };
       }
