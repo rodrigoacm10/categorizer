@@ -57,9 +57,9 @@ export class MockServer {
         }
       }
 
-      if (path.endsWith("/auth/token") && method === "POST") {
+      if ((path.endsWith("/auth/token") || path.endsWith("/auth/login")) && method === "POST") {
         try {
-          // Token endpoint recebe JSON ou FormUrlEncoded
+          // Endpoint recebe JSON ou FormUrlEncoded
           const email = body?.username || body?.email;
           const password = body?.password;
           const result = this.store.loginUser(email, password);
@@ -70,7 +70,7 @@ export class MockServer {
             body: JSON.stringify({
               access_token: result.access_token,
               token_type: "bearer",
-              user: result.user,
+              expires_in: 86400,
             }),
           });
         } catch (err: any) {
@@ -88,10 +88,26 @@ export class MockServer {
           email: "operador@empresa.com",
           full_name: "Operador E2E",
         };
+        const tenants = this.store.listTenantsForUser(this.currentUserId);
+        const tenantBriefs = tenants.map((t) => {
+          const mem = this.store.getMembership(t.id, this.currentUserId);
+          return {
+            tenant_id: t.id,
+            tenant_name: t.name,
+            tenant_slug: t.slug,
+            role: mem?.role || "OWNER",
+          };
+        });
         return route.fulfill({
           status: 200,
           contentType: "application/json",
-          body: JSON.stringify(user),
+          body: JSON.stringify({
+            id: user.id,
+            email: user.email,
+            full_name: user.full_name,
+            is_active: true,
+            tenants: tenantBriefs,
+          }),
         });
       }
 
@@ -118,6 +134,48 @@ export class MockServer {
             status: err.status || 400,
             contentType: "application/problem+json",
             body: JSON.stringify(err),
+          });
+        }
+      }
+
+      // Membros do tenant (/tenants/:id/members)
+      const membersMatch = path.match(/\/tenants\/([^/]+)\/members$/);
+      if (membersMatch && method === "GET") {
+        const tId = membersMatch[1];
+        const mem = this.store.getMembership(tId, this.currentUserId);
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(
+            mem
+              ? [mem]
+              : [
+                  {
+                    id: `mem_${tId}_${this.currentUserId}`,
+                    tenant_id: tId,
+                    user_id: this.currentUserId,
+                    role: "OWNER",
+                    user: {
+                      id: this.currentUserId,
+                      email: "operador@empresa.com",
+                      full_name: "Operador",
+                    },
+                  },
+                ]
+          ),
+        });
+      }
+
+      // Consulta de tenant por id (/tenants/:id)
+      const singleTenantMatch = path.match(/\/tenants\/([^/]+)$/);
+      if (singleTenantMatch && method === "GET") {
+        const tId = singleTenantMatch[1];
+        const tenant = this.store.getTenant(tId);
+        if (tenant) {
+          return route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(tenant),
           });
         }
       }

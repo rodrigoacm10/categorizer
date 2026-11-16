@@ -35,13 +35,16 @@ test.describe("Fluxo 3 — Livro-Razão e Movimentações Físicas com Invariant
     );
     productId = product.id;
 
-    // Injeta credenciais de autenticação e tenant no localStorage
+    // Injeta credenciais de autenticação e tenant no localStorage e cookies
     await page.goto("/login");
     await page.evaluate(
       ({ token, tId }) => {
-        localStorage.setItem("estoque_auth_token", token);
-        localStorage.setItem("estoque_active_tenant_id", tId);
-        localStorage.setItem("estoque_active_tenant_role", "OWNER");
+        localStorage.setItem("session_token", token);
+        localStorage.setItem("active_tenant_id", tId);
+        localStorage.setItem("active_tenant_role", "OWNER");
+        document.cookie = `session_token=${encodeURIComponent(token)}; path=/;`;
+        document.cookie = `active_tenant_id=${encodeURIComponent(tId)}; path=/;`;
+        document.cookie = `active_tenant_role=OWNER; path=/;`;
       },
       { token: userToken, tId: tenantId }
     );

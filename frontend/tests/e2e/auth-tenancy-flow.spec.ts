@@ -60,10 +60,11 @@ test.describe("Fluxo 1 — Autenticação, Multi-Tenancy e Acesso à Bancada (FT
     );
     mockServer.setCurrentUserId(user.id);
 
-    // Simula sessão autenticada injetando token no localStorage
+    // Simula sessão autenticada injetando token no localStorage e cookies
     await page.goto("/login");
     await page.evaluate((token) => {
-      localStorage.setItem("estoque_auth_token", token);
+      localStorage.setItem("session_token", token);
+      document.cookie = `session_token=${encodeURIComponent(token)}; path=/;`;
     }, `mock_jwt_token_${user.id}`);
 
     const tenantsPage = new TenantsPage(page);
@@ -111,9 +112,12 @@ test.describe("Fluxo 1 — Autenticação, Multi-Tenancy e Acesso à Bancada (FT
     await page.goto("/login");
     await page.evaluate(
       ({ token, tId }) => {
-        localStorage.setItem("estoque_auth_token", token);
-        localStorage.setItem("estoque_active_tenant_id", tId);
-        localStorage.setItem("estoque_active_tenant_role", "OWNER");
+        localStorage.setItem("session_token", token);
+        localStorage.setItem("active_tenant_id", tId);
+        localStorage.setItem("active_tenant_role", "OWNER");
+        document.cookie = `session_token=${encodeURIComponent(token)}; path=/;`;
+        document.cookie = `active_tenant_id=${encodeURIComponent(tId)}; path=/;`;
+        document.cookie = `active_tenant_role=OWNER; path=/;`;
       },
       { token: `mock_jwt_token_${user.id}`, tId: tenant.id }
     );
@@ -121,7 +125,7 @@ test.describe("Fluxo 1 — Autenticação, Multi-Tenancy e Acesso à Bancada (FT
     await page.goto("/dashboard");
 
     // Valida elementos do Dashboard industrial
-    await expect(page.locator("h1")).toContainText("Dashboard Operacional");
+    await expect(page.locator("h1")).toContainText("Bancada de Operações de Estoque");
     await expect(page.locator('[data-testid="kpi-strip"]')).toBeVisible();
   });
 });
