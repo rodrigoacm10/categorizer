@@ -262,13 +262,20 @@ export class MockServer {
         const lowStockCount = products.filter(
           (p) => p.min_stock !== null && p.min_stock !== undefined && p.current_quantity <= p.min_stock
         ).length;
+        const zeroStockCount = products.filter((p) => p.current_quantity === 0).length;
+        const movementsTotal = this.store.listMovements(tenantId).total;
         return route.fulfill({
           status: 200,
           contentType: "application/json",
           body: JSON.stringify({
+            totalProducts: products.length,
             total_products: products.length,
+            lowStockCount: lowStockCount,
             low_stock_count: lowStockCount,
-            total_movements: this.store.listMovements(tenantId).total,
+            zeroStockCount: zeroStockCount,
+            zero_stock_count: zeroStockCount,
+            movementsTodayCount: movementsTotal,
+            total_movements: movementsTotal,
           }),
         });
       }

@@ -147,6 +147,7 @@ export const KPIStrip: React.FC<KPIStripProps> = ({
   return (
     <section
       aria-label="Faixa Contínua de KPIs do Almoxarifado"
+      data-testid="kpi-strip"
       className={cn(
         "w-full border border-zinc-200 bg-zinc-50/60 divide-y sm:divide-y-0 sm:divide-x divide-zinc-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 select-none",
         className
