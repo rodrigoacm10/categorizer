@@ -19,7 +19,7 @@ export class MockServer {
   }
 
   public async setup(page: Page) {
-    await page.route("**/api/v1/**", async (route: Route) => {
+    await page.route("**/api/**", async (route: Route) => {
       const request = route.request();
       const url = new URL(request.url());
       const path = url.pathname;
