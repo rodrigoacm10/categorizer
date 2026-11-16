@@ -571,4 +571,27 @@ describe("FT-22: Suíte de Homologação de RBAC e Matriz de Acesso Visual/Opera
     });
   });
 
+  describe("7. Módulo de Governança de Membros (/settings/members)", () => {
+    it("bloqueia ALMOXARIFE e AUDITOR com barreira de negação de acesso", () => {
+      const { unmount } = renderWithRole(<MembersSettingsPage />, "ALMOXARIFE");
+      expect(screen.getByTestId("members-access-denied")).toBeDefined();
+      expect(membersApi.getMembersSummary).not.toHaveBeenCalled();
+      unmount();
+
+      renderWithRole(<MembersSettingsPage />, "AUDITOR");
+      expect(screen.getByTestId("members-access-denied")).toBeDefined();
+      expect(membersApi.getMembersSummary).not.toHaveBeenCalled();
+    });
+
+    it("permite visualização para GESTOR e OWNER", async () => {
+      renderWithRole(<MembersSettingsPage />, "GESTOR");
+
+      await waitFor(() => {
+        expect(membersApi.getMembersSummary).toHaveBeenCalledWith("t-homolog-rbac");
+        expect(membersApi.listMembers).toHaveBeenCalled();
+        expect(screen.getByTestId("member-kpi-strip")).toBeDefined();
+      });
+    });
+  });
+
 });
