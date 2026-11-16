@@ -404,4 +404,61 @@ describe("FT-22: Suíte de Homologação de RBAC e Matriz de Acesso Visual/Opera
     });
   });
 
+  describe("3. Navegação Primária do Workbench (WorkbenchLayout)", () => {
+    it("exibe todas as 7 abas para OWNER e GESTOR", () => {
+      renderWithRole(
+        <WorkbenchLayout>
+          <div>Conteúdo</div>
+        </WorkbenchLayout>,
+        "OWNER"
+      );
+
+      expect(screen.getByRole("link", { name: /dashboard/i })).toBeDefined();
+      expect(screen.getByRole("link", { name: /catálogo/i })).toBeDefined();
+      expect(screen.getByRole("link", { name: /categorias/i })).toBeDefined();
+      expect(screen.getByRole("link", { name: /movimentações/i })).toBeDefined();
+      expect(screen.getByRole("link", { name: /extrato/i })).toBeDefined();
+      expect(screen.getByRole("link", { name: /auditoria/i })).toBeDefined();
+      expect(screen.getByRole("link", { name: /membros/i })).toBeDefined();
+    });
+
+    it("oculta Categorias, Auditoria e Membros para o perfil ALMOXARIFE", () => {
+      renderWithRole(
+        <WorkbenchLayout>
+          <div>Conteúdo</div>
+        </WorkbenchLayout>,
+        "ALMOXARIFE"
+      );
+
+      expect(screen.getByRole("link", { name: /dashboard/i })).toBeDefined();
+      expect(screen.getByRole("link", { name: /catálogo/i })).toBeDefined();
+      expect(screen.getByRole("link", { name: /movimentações/i })).toBeDefined();
+      expect(screen.getByRole("link", { name: /extrato/i })).toBeDefined();
+
+      // Abas bloqueadas não devem ser renderizadas
+      expect(screen.queryByRole("link", { name: /categorias/i })).toBeNull();
+      expect(screen.queryByRole("link", { name: /auditoria/i })).toBeNull();
+      expect(screen.queryByRole("link", { name: /membros/i })).toBeNull();
+    });
+
+    it("oculta Categorias e Membros para AUDITOR, mas exibe Auditoria Contábil", () => {
+      renderWithRole(
+        <WorkbenchLayout>
+          <div>Conteúdo</div>
+        </WorkbenchLayout>,
+        "AUDITOR"
+      );
+
+      expect(screen.getByRole("link", { name: /dashboard/i })).toBeDefined();
+      expect(screen.getByRole("link", { name: /catálogo/i })).toBeDefined();
+      expect(screen.getByRole("link", { name: /movimentações/i })).toBeDefined();
+      expect(screen.getByRole("link", { name: /extrato/i })).toBeDefined();
+      expect(screen.getByRole("link", { name: /auditoria/i })).toBeDefined();
+
+      // Categorias e Membros restritos
+      expect(screen.queryByRole("link", { name: /categorias/i })).toBeNull();
+      expect(screen.queryByRole("link", { name: /membros/i })).toBeNull();
+    });
+  });
+
 });
