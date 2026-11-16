@@ -59,7 +59,7 @@ export const MemberFilters: React.FC<MemberFiltersProps> = ({
               type="button"
               data-testid="clear-search-button"
               onClick={() => onSearchChange("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 focus:outline-none"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-1 rounded-sm"
               aria-label="Limpar busca"
             >
               <X className="w-3.5 h-3.5" />
@@ -81,7 +81,7 @@ export const MemberFilters: React.FC<MemberFiltersProps> = ({
                 data-testid={`role-pill-${opt.value || "all"}`}
                 onClick={() => onRoleChange(opt.value)}
                 className={cn(
-                  "px-2.5 py-1 text-[11px] font-medium rounded transition-colors whitespace-nowrap select-none",
+                  "px-2.5 py-1 text-[11px] font-medium rounded transition-colors whitespace-nowrap select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-1",
                   isSelected
                     ? "bg-white text-zinc-950 shadow-sm border border-zinc-200/60 font-semibold"
                     : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/50"
@@ -99,7 +99,7 @@ export const MemberFilters: React.FC<MemberFiltersProps> = ({
         {totalFiltered !== undefined && (
           <span
             data-testid="total-members-counter"
-            className="text-[11px] text-zinc-500 font-mono tabular-nums"
+            className="text-[11px] text-zinc-600 font-mono tabular-nums"
           >
             {totalFiltered} {totalFiltered === 1 ? "membro localizado" : "membros localizados"}
           </span>
@@ -110,7 +110,7 @@ export const MemberFilters: React.FC<MemberFiltersProps> = ({
             type="button"
             data-testid="reset-filters-button"
             onClick={onReset}
-            className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-600 hover:text-zinc-900 px-2 py-1 bg-zinc-100 hover:bg-zinc-200 rounded transition-colors border border-zinc-200"
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-600 hover:text-zinc-900 px-2 py-1 bg-zinc-100 hover:bg-zinc-200 rounded transition-colors border border-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-1"
           >
             <X className="w-3 h-3" />
             <span>Limpar filtros</span>

@@ -285,7 +285,7 @@ export const MemberListTable: React.FC<MemberListTableProps> = ({
                                     : "Alterar papel RBAC do membro"
                                 }
                                 className={cn(
-                                  "h-7 px-2.5 pr-7 text-xs font-medium rounded border appearance-none cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-zinc-950",
+                                  "h-7 px-2.5 pr-7 text-xs font-medium rounded border appearance-none cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-zinc-950 focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-1",
                                   isSoleOwner
                                     ? "bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed opacity-75"
                                     : "bg-white text-zinc-900 border-zinc-300 hover:border-zinc-400"
@@ -350,7 +350,7 @@ export const MemberListTable: React.FC<MemberListTableProps> = ({
                             }
                             aria-label={`Remover membro ${member.full_name}`}
                             className={cn(
-                              "p-1.5 rounded transition-colors inline-flex items-center justify-center",
+                              "p-1.5 rounded transition-colors inline-flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600 focus-visible:ring-offset-1",
                               isSoleOwner
                                 ? "text-zinc-300 cursor-not-allowed opacity-50"
                                 : "text-zinc-400 hover:text-rose-600 hover:bg-rose-50"
