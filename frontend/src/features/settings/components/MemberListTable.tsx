@@ -164,7 +164,7 @@ export const MemberListTable: React.FC<MemberListTableProps> = ({
       )}
 
       {/* Tabela de Alta Densidade */}
-      <div className="w-full bg-white border border-zinc-200 rounded overflow-hidden shadow-xs">
+      <div className="w-full bg-white border border-zinc-200 rounded overflow-hidden">
         <div className="overflow-x-auto">
           <table
             data-testid="member-list-table"
@@ -249,7 +249,7 @@ export const MemberListTable: React.FC<MemberListTableProps> = ({
                             {isCurrentUser && (
                               <span
                                 data-testid={`badge-current-user-${member.user_id}`}
-                                className="px-1.5 py-0.2 text-[10px] bg-zinc-100 text-zinc-600 rounded border border-zinc-200 font-sans"
+                                className="px-1.5 py-0.5 text-[10px] bg-zinc-100 text-zinc-600 rounded border border-zinc-200 font-sans"
                               >
                                 Você
                               </span>

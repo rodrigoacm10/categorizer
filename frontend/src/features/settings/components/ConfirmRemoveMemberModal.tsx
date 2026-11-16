@@ -73,7 +73,7 @@ export const ConfirmRemoveMemberModal: React.FC<ConfirmRemoveMemberModalProps> =
       aria-modal="true"
       aria-labelledby="confirm-remove-modal-title"
       data-testid="confirm-remove-modal"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/40 backdrop-blur-xs"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/40 backdrop-blur-sm"
     >
       <div className="w-full max-w-md bg-white border border-zinc-200 rounded shadow-lg overflow-hidden flex flex-col font-sans text-xs">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-200 bg-zinc-50/50">

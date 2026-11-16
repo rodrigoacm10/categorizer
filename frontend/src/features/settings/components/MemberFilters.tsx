@@ -83,7 +83,7 @@ export const MemberFilters: React.FC<MemberFiltersProps> = ({
                 className={cn(
                   "px-2.5 py-1 text-[11px] font-medium rounded transition-colors whitespace-nowrap select-none",
                   isSelected
-                    ? "bg-white text-zinc-950 shadow-xs border border-zinc-200/60 font-semibold"
+                    ? "bg-white text-zinc-950 shadow-sm border border-zinc-200/60 font-semibold"
                     : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/50"
                 )}
               >
