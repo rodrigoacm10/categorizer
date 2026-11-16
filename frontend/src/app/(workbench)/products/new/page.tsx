@@ -4,6 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { ProductForm } from "@/features/products/components/ProductForm";
 import { useRBAC } from "@/shared/hooks/useRBAC";
+import { useTenant } from "@/features/tenants/hooks/useTenant";
 import { Button } from "@/shared/components/Button";
 import {
   Boxes,
@@ -21,7 +22,16 @@ import {
  */
 export default function NewProductPage() {
   const { can, role } = useRBAC();
+  const { isLoading: isTenantLoading } = useTenant();
   const canCreate = can("create_product");
+
+  if (isTenantLoading) {
+    return (
+      <div className="flex-1 p-8 text-center text-xs font-mono text-zinc-400">
+        Verificando permissões de operador...
+      </div>
+    );
+  }
 
   // Bloqueio RBAC para ALMOXARIFE e AUDITOR
   if (!canCreate) {

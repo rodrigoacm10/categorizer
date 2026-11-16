@@ -33,9 +33,20 @@ export function TenantProvider({
   initialTenantId = null,
   initialRole = null,
 }: TenantProviderProps) {
-  const [tenantId, setTenantIdState] = useState<string | null>(initialTenantId);
-  const [role, setRoleState] = useState<TenantRole | null>(initialRole);
-  const [isLoading, setIsLoading] = useState(true);
+  const [tenantId, setTenantIdState] = useState<string | null>(() => {
+    if (initialTenantId) return initialTenantId;
+    return typeof window !== "undefined" ? storage.getActiveTenantId() : null;
+  });
+  const [role, setRoleState] = useState<TenantRole | null>(() => {
+    if (initialRole) return initialRole;
+    return typeof window !== "undefined"
+      ? (storage.getActiveTenantRole() as TenantRole | null)
+      : null;
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    if (initialTenantId && initialRole) return false;
+    return typeof window !== "undefined" ? false : true;
+  });
 
   // Hook do React Query para invalidar dados do tenant anterior ao trocar de unidade
   let queryClient: ReturnType<typeof useQueryClient> | null = null;
