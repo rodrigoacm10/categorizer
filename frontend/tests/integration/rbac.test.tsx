@@ -546,4 +546,29 @@ describe("FT-22: Suíte de Homologação de RBAC e Matriz de Acesso Visual/Opera
     });
   });
 
+  describe("6. Módulo de Gestão de Categorias (/categories)", () => {
+    it("bloqueia ALMOXARIFE e AUDITOR com banner de acesso restrito", () => {
+      const { unmount } = renderWithRole(<CategoriesPage />, "ALMOXARIFE");
+      expect(screen.getByText("Acesso Restrito // Papel Insuficiente")).toBeDefined();
+      expect(screen.getByText(/ALMOXARIFE/i)).toBeDefined();
+      expect(categoriesApi.list).not.toHaveBeenCalled();
+      unmount();
+
+      renderWithRole(<CategoriesPage />, "AUDITOR");
+      expect(screen.getByText("Acesso Restrito // Papel Insuficiente")).toBeDefined();
+      expect(screen.getByText(/AUDITOR/i)).toBeDefined();
+      expect(categoriesApi.list).not.toHaveBeenCalled();
+    });
+
+    it("permite OWNER e GESTOR listarem e gerenciarem categorias", async () => {
+      renderWithRole(<CategoriesPage />, "GESTOR");
+
+      await waitFor(() => {
+        expect(categoriesApi.list).toHaveBeenCalled();
+        expect(screen.getByText("Fixadores")).toBeDefined();
+        expect(screen.getByRole("button", { name: /nova categoria/i })).toBeDefined();
+      });
+    });
+  });
+
 });
