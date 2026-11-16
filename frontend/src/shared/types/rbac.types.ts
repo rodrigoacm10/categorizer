@@ -25,7 +25,7 @@ export type ActionType =
   | "manage_members"
   | "manage_tenant"
   | "view_audit"
-
+  | "reconcile_inventory";
 
 /**
  * Matriz estrita de permissões por ação e papel.
