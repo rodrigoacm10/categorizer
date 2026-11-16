@@ -170,4 +170,81 @@ describe("FT-21: Suíte de Integração de Idempotência, Replay (X-Cache: HIT) 
       }
     });
   });
+
+  describe("2. Feedback Visual de Replay e Conflito no Formulário de Movimentação (MovementForm)", () => {
+    it("exibe badge e mensagem amigável de Replay quando a resposta da mutação indicar is_replay: true", async () => {
+      const replayMovement: StockMovement = {
+        id: "mov-replay-101",
+        tenant_id: "tenant-idemp-01",
+        product_id: "prod-idemp-01",
+        movement_type: "IN",
+        quantity: 10.0,
+        balance_after: 60.0,
+        reference_type: "MANUAL",
+        idempotency_key: "idem-key-cached",
+        created_at: "2026-11-16T12:00:00Z",
+        created_by_user_id: "u-1",
+        is_replay: true,
+      };
+
+      vi.mocked(inventoryApi.registerStockIn).mockResolvedValue(replayMovement);
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MovementForm initialProductId="prod-idemp-01" />
+        </QueryClientProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Barra Roscada Zincada 1m")).toBeDefined();
+      });
+
+      const qtyInput = screen.getByTestId("movement-quantity-input");
+      fireEvent.change(qtyInput, { target: { value: "10" } });
+
+      const submitBtn = screen.getByTestId("submit-movement-button");
+      fireEvent.click(submitBtn);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("replay-badge")).toBeDefined();
+        expect(
+          screen.getByText(/Operação Reexecutada/i)
+        ).toBeDefined();
+      });
+    });
+
+    it("captura e exibe erro RFC 7807 409 Conflict no banner de erro do formulário", async () => {
+      const conflictError = new ProblemDetailsError({
+        type: "idempotency-conflict",
+        title: "Conflito de Idempotência",
+        status: 409,
+        detail: "Conflito de transação: Chave de requisição reutilizada com dados diferentes.",
+      });
+
+      vi.mocked(inventoryApi.registerStockIn).mockRejectedValue(conflictError);
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MovementForm initialProductId="prod-idemp-01" />
+        </QueryClientProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Barra Roscada Zincada 1m")).toBeDefined();
+      });
+
+      const qtyInput = screen.getByTestId("movement-quantity-input");
+      fireEvent.change(qtyInput, { target: { value: "10" } });
+
+      const submitBtn = screen.getByTestId("submit-movement-button");
+      fireEvent.click(submitBtn);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("submit-error-alert")).toBeDefined();
+        expect(
+          screen.getByText("Conflito de transação: Chave de requisição reutilizada com dados diferentes.")
+        ).toBeDefined();
+      });
+    });
+  });
 });
