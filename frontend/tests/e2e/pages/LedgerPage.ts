@@ -8,7 +8,7 @@ export class LedgerPage {
 
   async goto() {
     await this.page.goto("/inventory/movements");
-    await expect(this.page.locator("h1")).toContainText("Extrato do Livro-Razão");
+    await expect(this.page.locator("h1")).toContainText("Extrato Geral do Livro-Razão");
   }
 
   async expectMovementsCount(count: number) {

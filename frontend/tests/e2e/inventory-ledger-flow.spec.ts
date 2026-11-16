@@ -57,8 +57,8 @@ test.describe("Fluxo 3 — Livro-Razão e Movimentações Físicas com Invariant
     // Busca o produto pelo ID
     await inventoryPage.searchProduct(productId);
 
-    // Saldo inicial deve ser 0,000 UN
-    expect(await inventoryPage.getBalanceValue()).toBe("0,000 UN");
+    // Saldo inicial deve ser 0 UN
+    expect(await inventoryPage.getBalanceValue()).toBe("0 UN");
 
     // Seleciona aba Entrada (+)
     await inventoryPage.selectTab("IN");
@@ -67,16 +67,16 @@ test.describe("Fluxo 3 — Livro-Razão e Movimentações Físicas com Invariant
     await inventoryPage.fillMovement("10", "NF-e 8945 - Recebimento Fornecedor SKF");
 
     // Valida pré-visualização contábil antes de submeter
-    await expect(page.locator('[data-testid="current-balance-value"]')).toContainText("0,000");
-    await expect(page.locator('[data-testid="delta-value"]')).toContainText("+10,000");
-    await expect(page.locator('[data-testid="projected-balance-value"]')).toContainText("10,000");
+    await expect(page.locator('[data-testid="current-balance-value"]')).toContainText("0 UN");
+    await expect(page.locator('[data-testid="delta-value"]')).toContainText("+10 UN");
+    await expect(page.locator('[data-testid="projected-balance-value"]')).toContainText("10 UN");
 
     // Confirma entrada
     await inventoryPage.submitMovement();
     await inventoryPage.expectSuccess("Movimentação física de IN registrada com sucesso");
 
-    // Saldo físico atualizado para 10,000 UN
-    expect(await inventoryPage.getBalanceValue()).toBe("10,000 UN");
+    // Saldo físico atualizado para 10 UN
+    expect(await inventoryPage.getBalanceValue()).toBe("10 UN");
 
     // Valida integridade no store
     const prod = mockServer.store.getProduct(tenantId, productId);
@@ -98,9 +98,9 @@ test.describe("Fluxo 3 — Livro-Razão e Movimentações Físicas com Invariant
     const inventoryPage = new InventoryPage(page);
     await inventoryPage.goto();
 
-    // Busca o produto (saldo atual 10,000 UN)
+    // Busca o produto (saldo atual 10 UN)
     await inventoryPage.searchProduct(productId);
-    expect(await inventoryPage.getBalanceValue()).toBe("10,000 UN");
+    expect(await inventoryPage.getBalanceValue()).toBe("10 UN");
 
     // Seleciona aba Saída (-)
     await inventoryPage.selectTab("OUT");
@@ -109,16 +109,16 @@ test.describe("Fluxo 3 — Livro-Razão e Movimentações Físicas com Invariant
     await inventoryPage.fillMovement("3", "Requisição OS-402 Manutenção Preventiva Ponte Rolante");
 
     // Valida pré-visualização contábil (10 - 3 = 7)
-    await expect(page.locator('[data-testid="current-balance-value"]')).toContainText("10,000");
-    await expect(page.locator('[data-testid="delta-value"]')).toContainText("-3,000");
-    await expect(page.locator('[data-testid="projected-balance-value"]')).toContainText("7,000");
+    await expect(page.locator('[data-testid="current-balance-value"]')).toContainText("10 UN");
+    await expect(page.locator('[data-testid="delta-value"]')).toContainText("-3 UN");
+    await expect(page.locator('[data-testid="projected-balance-value"]')).toContainText("7 UN");
 
     // Confirma saída
     await inventoryPage.submitMovement();
     await inventoryPage.expectSuccess("Movimentação física de OUT registrada com sucesso");
 
-    // Saldo físico atualizado para 7,000 UN
-    expect(await inventoryPage.getBalanceValue()).toBe("7,000 UN");
+    // Saldo físico atualizado para 7 UN
+    expect(await inventoryPage.getBalanceValue()).toBe("7 UN");
 
     // Valida integridade no store
     const prod = mockServer.store.getProduct(tenantId, productId);
@@ -135,7 +135,7 @@ test.describe("Fluxo 3 — Livro-Razão e Movimentações Físicas com Invariant
     await inventoryPage.goto();
 
     await inventoryPage.searchProduct(productId);
-    expect(await inventoryPage.getBalanceValue()).toBe("7,000 UN");
+    expect(await inventoryPage.getBalanceValue()).toBe("7 UN");
 
     // Seleciona aba Saída (-)
     await inventoryPage.selectTab("OUT");
@@ -164,7 +164,7 @@ test.describe("Fluxo 3 — Livro-Razão e Movimentações Físicas com Invariant
     await inventoryPage.goto();
 
     await inventoryPage.searchProduct(productId);
-    expect(await inventoryPage.getBalanceValue()).toBe("7,000 UN");
+    expect(await inventoryPage.getBalanceValue()).toBe("7 UN");
 
     // Seleciona aba Ajuste Físico (Δ)
     await inventoryPage.selectTab("ADJUSTMENT");
@@ -173,16 +173,16 @@ test.describe("Fluxo 3 — Livro-Razão e Movimentações Físicas com Invariant
     await inventoryPage.fillMovement("12", "Contagem de inventário físico periódico Galpão B");
 
     // Valida pré-visualização contábil
-    await expect(page.locator('[data-testid="current-balance-value"]')).toContainText("7,000");
-    await expect(page.locator('[data-testid="delta-value"]')).toContainText("+5,000");
-    await expect(page.locator('[data-testid="projected-balance-value"]')).toContainText("12,000");
+    await expect(page.locator('[data-testid="current-balance-value"]')).toContainText("7 UN");
+    await expect(page.locator('[data-testid="delta-value"]')).toContainText("+5 UN");
+    await expect(page.locator('[data-testid="projected-balance-value"]')).toContainText("12 UN");
 
     // Confirma ajuste
     await inventoryPage.submitMovement();
     await inventoryPage.expectSuccess("Movimentação física de ADJUSTMENT registrada com sucesso");
 
-    // Saldo físico atualizado para 12,000 UN
-    expect(await inventoryPage.getBalanceValue()).toBe("12,000 UN");
+    // Saldo físico atualizado para 12 UN
+    expect(await inventoryPage.getBalanceValue()).toBe("12 UN");
 
     // Valida integridade no store
     const prod = mockServer.store.getProduct(tenantId, productId);
@@ -214,20 +214,20 @@ test.describe("Fluxo 3 — Livro-Razão e Movimentações Físicas com Invariant
 
     // Valida cada linha do extrato contábil
     await ledgerPage.expectMovementRecord({
-      type: "ADJUSTMENT",
-      delta: "5,000",
+      type: "AJUSTE",
+      delta: "+5 UN",
       reason: "Contagem de inventário periódico",
     });
 
     await ledgerPage.expectMovementRecord({
-      type: "OUT",
-      delta: "3,000",
+      type: "SAÍDA",
+      delta: "-3 UN",
       reason: "Requisição OS-402 Manutenção",
     });
 
     await ledgerPage.expectMovementRecord({
-      type: "IN",
-      delta: "10,000",
+      type: "ENTRADA",
+      delta: "+10 UN",
       reason: "Recebimento NF-e 8945",
     });
 

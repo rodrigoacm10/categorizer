@@ -376,8 +376,12 @@ export class MockServer {
         const result = this.store.listMovements(tenantId, { product_id: prodId, type: movType, limit, offset });
         return route.fulfill({
           status: 200,
+          headers: {
+            "x-total-count": result.total.toString(),
+            "x-total-pages": Math.max(1, Math.ceil(result.total / limit)).toString(),
+          },
           contentType: "application/json",
-          body: JSON.stringify(result),
+          body: JSON.stringify(result.items),
         });
       }
 

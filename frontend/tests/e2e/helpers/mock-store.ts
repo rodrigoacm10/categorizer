@@ -61,9 +61,13 @@ export interface MockMovement {
   id: string;
   tenant_id: string;
   product_id: string;
+  product_name?: string | null;
+  product_unit?: string | null;
   type: "IN" | "OUT" | "ADJUSTMENT";
   quantity: number;
   quantity_scaled: number;
+  balance_after: number;
+  balance_after_scaled: number;
   previous_quantity: number;
   previous_quantity_scaled: number;
   new_quantity: number;
@@ -335,9 +339,13 @@ export class MockStateStore {
       id: `mov_${String(this.movementCounter++).padStart(5, "0")}`,
       tenant_id: tenantId,
       product_id: productId,
+      product_name: product.name,
+      product_unit: product.unit,
       type,
-      quantity: Math.abs(deltaScaled) / 1000,
-      quantity_scaled: Math.abs(deltaScaled),
+      quantity: type === "ADJUSTMENT" ? deltaScaled / 1000 : Math.abs(deltaScaled) / 1000,
+      quantity_scaled: type === "ADJUSTMENT" ? deltaScaled : Math.abs(deltaScaled),
+      balance_after: newScaled / 1000,
+      balance_after_scaled: newScaled,
       previous_quantity: previousFloat,
       previous_quantity_scaled: previousScaled,
       new_quantity: newScaled / 1000,
