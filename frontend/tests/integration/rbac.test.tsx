@@ -515,4 +515,35 @@ describe("FT-22: Suíte de Homologação de RBAC e Matriz de Acesso Visual/Opera
     });
   });
 
+  describe("5. Bancada de Auditoria e Reconciliação Contábil (/inventory/reconciliation)", () => {
+    it("bloqueia acesso de ALMOXARIFE com tela de acesso restrito e impede chamada à API", async () => {
+      renderWithRole(<ReconciliationPage />, "ALMOXARIFE");
+
+      expect(screen.getByTestId("reconciliation-access-denied")).toBeDefined();
+      expect(screen.getByText("Acesso Restrito à Auditoria Contábil")).toBeDefined();
+      expect(screen.getByText(/ALMOXARIFE/i)).toBeDefined();
+
+      expect(reconciliationApi.getReconciliationReport).not.toHaveBeenCalled();
+    });
+
+    it("concede acesso a AUDITOR, executando a reconciliação e exibindo o KPI strip", async () => {
+      renderWithRole(<ReconciliationPage />, "AUDITOR");
+
+      await waitFor(() => {
+        expect(reconciliationApi.getReconciliationReport).toHaveBeenCalledWith("t-homolog-rbac");
+        expect(screen.getByTestId("reconciliation-kpi-strip")).toBeDefined();
+        expect(screen.getByTestId("reconciliation-banner-success")).toBeDefined();
+      });
+    });
+
+    it("concede acesso a GESTOR e OWNER", async () => {
+      renderWithRole(<ReconciliationPage />, "GESTOR");
+
+      await waitFor(() => {
+        expect(reconciliationApi.getReconciliationReport).toHaveBeenCalledWith("t-homolog-rbac");
+        expect(screen.getByTestId("reconciliation-kpi-strip")).toBeDefined();
+      });
+    });
+  });
+
 });
