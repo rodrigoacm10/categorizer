@@ -49,5 +49,6 @@ export const RBAC_PERMISSIONS_MATRIX: Record<ActionType, readonly TenantRole[]> 
   invite_member: ["OWNER", "GESTOR"],
   manage_members: ["OWNER"],
   manage_tenant: ["OWNER"],
-
+  view_audit: ["OWNER", "GESTOR", "AUDITOR"],
+  reconcile_inventory: ["OWNER", "GESTOR", "AUDITOR"],
 };
