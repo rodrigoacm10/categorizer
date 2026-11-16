@@ -15,6 +15,8 @@ describe("useRBAC", () => {
       expect(result.current.can("stock_in")).toBe(true);
       expect(result.current.can("stock_out")).toBe(true);
       expect(result.current.can("stock_adjustment")).toBe(true);
+      expect(result.current.can("view_audit")).toBe(false);
+      expect(result.current.can("reconcile_inventory")).toBe(false);
     });
 
     it("usuário com papel AUDITOR tem can('stock_in') === false e can('stock_adjustment') === true", () => {
@@ -23,6 +25,8 @@ describe("useRBAC", () => {
       expect(result.current.can("stock_out")).toBe(false);
       expect(result.current.can("stock_adjustment")).toBe(true);
       expect(result.current.can("create_product")).toBe(false);
+      expect(result.current.can("view_audit")).toBe(true);
+      expect(result.current.can("reconcile_inventory")).toBe(true);
     });
 
     it("usuário com papel OWNER tem todas as permissões ativas", () => {
