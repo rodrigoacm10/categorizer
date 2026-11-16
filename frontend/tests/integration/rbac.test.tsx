@@ -628,4 +628,40 @@ describe("FT-22: Suíte de Homologação de RBAC e Matriz de Acesso Visual/Opera
     });
   });
 
+  describe("9. Barra de Ações Rápidas do Dashboard (QuickActionToolbar)", () => {
+    it("para AUDITOR, desabilita botões de Entrada e Saída com tooltip, mantendo Ajuste ativo", () => {
+      renderWithRole(<QuickActionToolbar />, "AUDITOR");
+
+      const entradaBtn = screen.getByRole("button", {
+        name: /Registrar Entrada de Estoque \(Desabilitado\)/i,
+      });
+      expect(entradaBtn).toBeDefined();
+      expect(entradaBtn.hasAttribute("disabled")).toBe(true);
+
+      const saidaBtn = screen.getByRole("button", {
+        name: /Registrar Saída de Estoque \(Desabilitado\)/i,
+      });
+      expect(saidaBtn).toBeDefined();
+      expect(saidaBtn.hasAttribute("disabled")).toBe(true);
+
+      // Ajuste Contábil permanece ativo como Link
+      const ajusteLink = screen.getByRole("link", { name: /ajuste de inventário/i });
+      expect(ajusteLink).toBeDefined();
+      expect(ajusteLink.getAttribute("href")).toBe("/inventory/move?mode=ADJUSTMENT");
+    });
+
+    it("para ALMOXARIFE, GESTOR e OWNER, renderiza links ativos para Entrada e Saída", () => {
+      renderWithRole(<QuickActionToolbar />, "ALMOXARIFE");
+
+      const entradaLink = screen.getByRole("link", {
+        name: "Registrar Entrada de Estoque",
+      });
+      expect(entradaLink.getAttribute("href")).toBe("/inventory/move?mode=IN");
+
+      const saidaLink = screen.getByRole("link", {
+        name: "Registrar Saída de Estoque",
+      });
+      expect(saidaLink.getAttribute("href")).toBe("/inventory/move?mode=OUT");
+    });
+  });
 });
