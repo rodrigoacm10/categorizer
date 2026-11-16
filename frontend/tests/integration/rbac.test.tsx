@@ -370,4 +370,38 @@ describe("FT-22: Suíte de Homologação de RBAC e Matriz de Acesso Visual/Opera
     });
   });
 
+  describe("2. Componente Declarativo de Controle de Acesso (<Can />)", () => {
+    it("renderiza children quando o papel possui a permissão e fallback quando não possui", () => {
+      function TestGates() {
+        return (
+          <div>
+            <Can I="create_product" fallback={<span data-testid="fb-create">Bloqueado</span>}>
+              <span data-testid="child-create">Permitido</span>
+            </Can>
+            <Can I="view_audit" fallback={<span data-testid="fb-audit">Bloqueado</span>}>
+              <span data-testid="child-audit">Permitido</span>
+            </Can>
+          </div>
+        );
+      }
+
+      // ALMOXARIFE: sem create_product, sem view_audit
+      const { unmount } = renderWithRole(<TestGates />, "ALMOXARIFE");
+      expect(screen.getByTestId("fb-create").textContent).toBe("Bloqueado");
+      expect(screen.getByTestId("fb-audit").textContent).toBe("Bloqueado");
+      unmount();
+
+      // AUDITOR: sem create_product, COM view_audit
+      const { unmount: unmountAuditor } = renderWithRole(<TestGates />, "AUDITOR");
+      expect(screen.getByTestId("fb-create").textContent).toBe("Bloqueado");
+      expect(screen.getByTestId("child-audit").textContent).toBe("Permitido");
+      unmountAuditor();
+
+      // GESTOR: COM create_product, COM view_audit
+      renderWithRole(<TestGates />, "GESTOR");
+      expect(screen.getByTestId("child-create").textContent).toBe("Permitido");
+      expect(screen.getByTestId("child-audit").textContent).toBe("Permitido");
+    });
+  });
+
 });
