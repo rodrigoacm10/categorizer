@@ -247,4 +247,41 @@ describe("FT-21: Suíte de Integração de Idempotência, Replay (X-Cache: HIT) 
       });
     });
   });
+
+  describe("3. Simulação Stateful de Cache RFC 9474 via Mock Handlers (handlers.ts)", () => {
+    it("deduplica submissão idêntica com X-Cache: HIT e rejeita payload divergente com 409 Conflict", async () => {
+      const { fetchMock, interceptedRequests } = createStatefulIdempotencyFetchMock();
+      global.fetch = fetchMock;
+
+      const sharedKey = "idem-stateful-uuid-9999";
+
+      // 1ª chamada: processa normalmente (X-Cache: MISS)
+      const firstRes = await api.post<StockMovement>(
+        "/inventory/in",
+        { product_id: "prod-idemp-01", quantity: 15, reason: "NF 100" },
+        { idempotencyKey: sharedKey }
+      );
+      expect(firstRes.isCached).toBe(false);
+      expect(firstRes.data.balance_after).toBe(65);
+      expect(interceptedRequests[0].idempotencyKey).toBe(sharedKey);
+
+      // 2ª chamada com MESMA chave e MESMO payload: retorna replay seguro (X-Cache: HIT)
+      const replayRes = await api.post<StockMovement>(
+        "/inventory/in",
+        { product_id: "prod-idemp-01", quantity: 15, reason: "NF 100" },
+        { idempotencyKey: sharedKey }
+      );
+      expect(replayRes.isCached).toBe(true);
+      expect(replayRes.data.balance_after).toBe(65);
+
+      // 3ª chamada com MESMA chave e PAYLOAD DIFERENTE: rejeita com 409 ProblemDetailsError
+      await expect(
+        api.post<StockMovement>(
+          "/inventory/in",
+          { product_id: "prod-idemp-01", quantity: 99, reason: "Adulterado" },
+          { idempotencyKey: sharedKey }
+        )
+      ).rejects.toThrow(ProblemDetailsError);
+    });
+  });
 });
