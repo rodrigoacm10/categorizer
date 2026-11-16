@@ -23,7 +23,9 @@ export type ActionType =
   | "view_members"
   | "invite_member"
   | "manage_members"
-  | "manage_tenant";
+  | "manage_tenant"
+  | "view_audit"
+
 
 /**
  * Matriz estrita de permissões por ação e papel.
@@ -47,4 +49,5 @@ export const RBAC_PERMISSIONS_MATRIX: Record<ActionType, readonly TenantRole[]> 
   invite_member: ["OWNER", "GESTOR"],
   manage_members: ["OWNER"],
   manage_tenant: ["OWNER"],
-} as const;
+
+};
