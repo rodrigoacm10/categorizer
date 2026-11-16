@@ -594,4 +594,38 @@ describe("FT-22: Suíte de Homologação de RBAC e Matriz de Acesso Visual/Opera
     });
   });
 
+  describe("8. Catálogo e Cadastro de Novos Produtos (/products & /products/new)", () => {
+    it("no Catálogo (/products), oculta botão 'Novo Produto' para ALMOXARIFE e AUDITOR", async () => {
+      const { unmount } = renderWithRole(<ProductsPage />, "ALMOXARIFE");
+      await waitFor(() => {
+        expect(screen.queryByTestId("new-product-button")).toBeNull();
+      });
+      unmount();
+
+      renderWithRole(<ProductsPage />, "AUDITOR");
+      await waitFor(() => {
+        expect(screen.queryByTestId("new-product-button")).toBeNull();
+      });
+    });
+
+    it("no Catálogo (/products), exibe botão 'Novo Produto' para OWNER e GESTOR", async () => {
+      renderWithRole(<ProductsPage />, "GESTOR");
+      await waitFor(() => {
+        expect(screen.getByTestId("new-product-button")).toBeDefined();
+      });
+    });
+
+    it("na página de Cadastro (/products/new), bloqueia ALMOXARIFE e AUDITOR com banner de bloqueio", () => {
+      renderWithRole(<NewProductPage />, "ALMOXARIFE");
+      expect(screen.getByTestId("rbac-restricted-banner")).toBeDefined();
+      expect(screen.getByText("Acesso Restrito // Papel Insuficiente")).toBeDefined();
+    });
+
+    it("na página de Cadastro (/products/new), renderiza o formulário de cadastro para OWNER e GESTOR", () => {
+      renderWithRole(<NewProductPage />, "OWNER");
+      expect(screen.queryByTestId("rbac-restricted-banner")).toBeNull();
+      expect(screen.getByTestId("product-form")).toBeDefined();
+    });
+  });
+
 });
