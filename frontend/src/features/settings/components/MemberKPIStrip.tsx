@@ -66,7 +66,7 @@ export const MemberKPIStrip: React.FC<MemberKPIStripProps> = ({
   return (
     <div
       data-testid="member-kpi-strip"
-      className="w-full bg-white border border-zinc-200 rounded divide-y sm:divide-y-0 sm:divide-x divide-zinc-200 grid grid-cols-2 md:grid-cols-5"
+      className="w-full bg-zinc-50/60 border border-zinc-200 rounded divide-y sm:divide-y-0 sm:divide-x divide-zinc-200 grid grid-cols-2 md:grid-cols-5"
     >
       {items.map((item) => {
         const Icon = item.icon;
@@ -74,10 +74,10 @@ export const MemberKPIStrip: React.FC<MemberKPIStripProps> = ({
           <div
             key={item.id}
             data-testid={`kpi-item-${item.id}`}
-            className="p-3.5 flex flex-col justify-between transition-colors hover:bg-zinc-50/50"
+            className="p-3.5 flex flex-col justify-between transition-colors hover:bg-white"
           >
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-semibold tracking-wider uppercase text-zinc-500 font-sans">
+              <span className="text-[11px] font-semibold tracking-wider uppercase text-zinc-600 font-sans">
                 {item.label}
               </span>
               <Icon className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
@@ -100,14 +100,14 @@ export const MemberKPIStrip: React.FC<MemberKPIStripProps> = ({
               {item.badge && !isLoading && (
                 <span
                   data-testid="sole-owner-indicator"
-                  className="px-1.5 py-0.5 text-[9px] font-semibold uppercase bg-amber-50 text-amber-800 border border-amber-200 rounded tracking-wider"
+                  className="px-1.5 py-0.5 text-[10px] font-semibold uppercase bg-amber-50 text-amber-800 border border-amber-200 rounded tracking-wider"
                 >
                   {item.badge}
                 </span>
               )}
             </div>
 
-            <div className="mt-1 text-[11px] text-zinc-500 font-sans truncate">
+            <div className="mt-1 text-[11px] text-zinc-600 font-sans truncate">
               {item.subtext}
             </div>
           </div>

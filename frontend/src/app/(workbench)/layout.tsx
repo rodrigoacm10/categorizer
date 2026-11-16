@@ -10,6 +10,7 @@ import {
   ArrowLeftRight,
   History,
   Users,
+  Scale,
   Terminal,
 } from "lucide-react";
 import { TopBar } from "@/shared/components/TopBar";
@@ -62,6 +63,13 @@ const PRIMARY_NAV_TABS: NavTab[] = [
     href: "/inventory/movements",
     icon: History,
     exact: false,
+  },
+  {
+    label: "Auditoria",
+    href: "/inventory/reconciliation",
+    icon: Scale,
+    exact: false,
+    requiredPermission: "view_audit",
   },
   {
     label: "Membros",

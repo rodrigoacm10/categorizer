@@ -126,7 +126,7 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({
       aria-modal="true"
       aria-labelledby="invite-member-modal-title"
       data-testid="invite-member-modal"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/40 backdrop-blur-xs"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/40 backdrop-blur-sm"
     >
       <div
         ref={modalRef}

@@ -46,7 +46,17 @@ export default function MembersSettingsPage() {
   const canInvite = can("invite_member");
   const canManage = can("manage_members");
 
-  const loadData = useCallback(
+  const loadSummary = useCallback(async () => {
+    if (!tenantId || !canView) return;
+    try {
+      const summaryData = await membersApi.getMembersSummary(tenantId);
+      setSummary(summaryData);
+    } catch (_err: unknown) {
+      // Ignora erro no resumo caso a chamada falhe isoladamente
+    }
+  }, [tenantId, canView]);
+
+  const loadMembers = useCallback(
     async (isManualRefresh = false) => {
       if (!tenantId || !canView) return;
 
@@ -58,17 +68,13 @@ export default function MembersSettingsPage() {
       setError(null);
 
       try {
-        const [summaryData, listData] = await Promise.all([
-          membersApi.getMembersSummary(tenantId),
-          membersApi.listMembers(tenantId, {
-            search: search.trim() || undefined,
-            role: selectedRole,
-            limit: 100,
-            offset: 0,
-          }),
-        ]);
+        const listData = await membersApi.listMembers(tenantId, {
+          search: search.trim() || undefined,
+          role: selectedRole,
+          limit: 100,
+          offset: 0,
+        });
 
-        setSummary(summaryData);
         setMembers(listData.items);
         setTotalCount(listData.totalCount);
       } catch (err: unknown) {
@@ -85,9 +91,20 @@ export default function MembersSettingsPage() {
     [tenantId, canView, search, selectedRole]
   );
 
+  const loadData = useCallback(
+    async (isManualRefresh = false) => {
+      await Promise.all([loadSummary(), loadMembers(isManualRefresh)]);
+    },
+    [loadSummary, loadMembers]
+  );
+
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    loadSummary();
+  }, [loadSummary]);
+
+  useEffect(() => {
+    loadMembers();
+  }, [loadMembers]);
 
   const handleRoleChange = async (userId: string, newRole: TenantRole) => {
     if (!tenantId) return;
