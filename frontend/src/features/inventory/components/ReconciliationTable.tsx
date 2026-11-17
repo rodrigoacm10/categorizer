@@ -77,7 +77,7 @@ export const ReconciliationTable: React.FC<ReconciliationTableProps> = ({
               data-testid="reconciliation-search-input"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filtrar por produto ou identificador..."
+              placeholder="Filtrar por nome do produto..."
               className="w-full h-8 pl-8 pr-3 bg-zinc-50 border border-zinc-200 rounded text-xs text-zinc-900 placeholder:text-zinc-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-zinc-950 focus:border-zinc-950 transition-colors"
             />
           </div>
@@ -209,7 +209,7 @@ export const ReconciliationTable: React.FC<ReconciliationTableProps> = ({
                           : "hover:bg-zinc-50/70"
                       )}
                     >
-                      {/* Nome do Produto e ID */}
+                      {/* Nome do Produto */}
                       <td className="py-2.5 px-4">
                         <div className="flex flex-col">
                           <span
@@ -217,9 +217,6 @@ export const ReconciliationTable: React.FC<ReconciliationTableProps> = ({
                             className="font-semibold text-zinc-950"
                           >
                             {item.product_name}
-                          </span>
-                          <span className="font-mono text-[10px] text-zinc-500">
-                            ID: {item.product_id}
                           </span>
                         </div>
                       </td>

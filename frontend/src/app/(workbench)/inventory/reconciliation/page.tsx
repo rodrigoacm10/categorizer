@@ -114,9 +114,6 @@ export default function ReconciliationPage() {
             <h1 className="text-lg font-bold text-zinc-950 tracking-tight">
               Auditoria e Reconciliação Contábil
             </h1>
-            <span className="px-2 py-0.5 text-[11px] font-mono font-medium bg-zinc-100 text-zinc-700 border border-zinc-200 rounded">
-              MODO OPERATE
-            </span>
           </div>
           <p className="text-xs text-zinc-600 mt-1">
             Auditoria matemática formal do inventário físico: valida se{" "}
