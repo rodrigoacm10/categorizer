@@ -21,16 +21,17 @@ describe("FT-21: Suíte de Integração de Idempotência, Replay (X-Cache: HIT) 
   const originalFetch = global.fetch;
   let queryClient: QueryClient;
 
-  const mockProduct: Product = {
+  const mockProduct: any = {
     id: "prod-idemp-01",
-    tenant_id: "tenant-idemp-01",
-    sku: "SKU-IDEMP-01",
     name: "Barra Roscada Zincada 1m",
     description: "Barra roscada 1/2 polegada",
     unit: "UN",
     current_quantity: 50.0,
+    current_quantity_scaled: 50000,
     min_stock: 10.0,
+    is_low_stock: false,
     is_active: true,
+    categories: [],
     created_at: "2026-11-01T10:00:00Z",
     updated_at: "2026-11-01T10:00:00Z",
   };
@@ -173,9 +174,8 @@ describe("FT-21: Suíte de Integração de Idempotência, Replay (X-Cache: HIT) 
 
   describe("2. Feedback Visual de Replay e Conflito no Formulário de Movimentação (MovementForm)", () => {
     it("exibe badge e mensagem amigável de Replay quando a resposta da mutação indicar is_replay: true", async () => {
-      const replayMovement: StockMovement = {
+      const replayMovement: any = {
         id: "mov-replay-101",
-        tenant_id: "tenant-idemp-01",
         product_id: "prod-idemp-01",
         movement_type: "IN",
         quantity: 10.0,

@@ -102,13 +102,14 @@ describe("FT-22: Suíte de Homologação de RBAC e Matriz de Acesso Visual/Opera
 
     vi.mocked(inventoryApi.lookupProduct).mockResolvedValue({
       id: "p-101",
-      sku: "SKU-PAR-01",
       name: "Parafuso Sextavado M8",
       unit: "UN",
       current_quantity: 100.0,
       current_quantity_scaled: 100000,
-      min_quantity: 20.0,
+      min_stock: 20.0,
+      is_low_stock: false,
       is_active: true,
+      categories: [],
       created_at: "2026-11-16T10:00:00Z",
       updated_at: "2026-11-16T10:00:00Z",
     });
@@ -123,7 +124,7 @@ describe("FT-22: Suíte de Homologação de RBAC e Matriz de Acesso Visual/Opera
     });
 
     vi.mocked(categoriesApi.list).mockResolvedValue([
-      { id: "cat-1", name: "Fixadores", tenant_id: "t-homolog-rbac", created_at: "2026-11-16T10:00:00Z" },
+      { id: "cat-1", name: "Fixadores", color: "#2563EB", created_at: "2026-11-16T10:00:00Z" },
     ]);
 
     vi.mocked(membersApi.getMembersSummary).mockResolvedValue({
@@ -137,21 +138,21 @@ describe("FT-22: Suíte de Homologação de RBAC e Matriz de Acesso Visual/Opera
     vi.mocked(membersApi.listMembers).mockResolvedValue({
       items: [
         {
-          id: "m-1",
           user_id: "usr-active-1",
           email: "operador@tenant.com",
-          name: "Operador Teste",
+          full_name: "Operador Teste",
           role: "OWNER",
           joined_at: "2026-11-16T08:00:00Z",
         },
       ],
       totalCount: 1,
-      limit: 100,
-      offset: 0,
+      totalPages: 1,
     });
 
     vi.mocked(productsApi.list).mockResolvedValue([]);
-    vi.mocked(productsApi.getCategories).mockResolvedValue([]);
+    if ("getCategories" in productsApi) {
+      (productsApi as any).getCategories.mockResolvedValue([]);
+    }
   });
 
   const renderWithRole = (ui: React.ReactElement, role: TenantRole) => {
