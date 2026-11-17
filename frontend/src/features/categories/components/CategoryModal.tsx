@@ -1,146 +1,291 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { categoriesApi } from "../services/categories.api";
 import { Category } from "../types/category.types";
-import { X, Tag } from "lucide-react";
+import { X, Tag, AlertCircle } from "lucide-react";
+import { Button } from "@/shared/components/Button";
+import { cn } from "@/shared/utils/cn";
 
-interface Props {
+export interface CategoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (cat: Category) => void;
+  onSuccess: (category: Category) => void;
 }
 
-const PRESET_COLORS = [
-  "#3B82F6", // Azul
-  "#10B981", // Verde
-  "#F59E0B", // Âmbar
-  "#EF4444", // Vermelho
-  "#8B5CF6", // Roxo
-  "#EC4899", // Rosa
-  "#06B6D4", // Ciano
-  "#64748B", // Grafite
+export const INDUSTRIAL_PALETTE = [
+  { label: "Azul Industrial", color: "#2563EB" },
+  { label: "Aço / Grafite", color: "#475569" },
+  { label: "Verde Esmeralda", color: "#16A34A" },
+  { label: "Âmbar Operacional", color: "#D97706" },
+  { label: "Índigo Técnico", color: "#6366F1" },
+  { label: "Zinco Neutro", color: "#52525B" },
+  { label: "Ciano", color: "#0891B2" },
+  { label: "Rubro Alerta", color: "#DC2626" },
 ];
 
-export const CategoryModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) => {
+/**
+ * CategoryModal (FT-11 / Impeccable Workbench):
+ * Modal industrial para criação de categoria no escopo do tenant ativo.
+ * Painel plano com bordas retas de 1px, acessibilidade completa por teclado (Tab e Escape).
+ */
+export const CategoryModal: React.FC<CategoryModalProps> = ({
+  isOpen,
+  onClose,
+  onSuccess,
+}) => {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [color, setColor] = useState(PRESET_COLORS[0]);
-  const [loading, setLoading] = useState(false);
+  const [color, setColor] = useState(INDUSTRIAL_PALETTE[0].color);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  // Foco automático e listener de tecla Escape
+  useEffect(() => {
+    if (isOpen) {
+      setName("");
+      setDescription("");
+      setColor(INDUSTRIAL_PALETTE[0].color);
+      setError(null);
+      setIsLoading(false);
+
+      const timer = setTimeout(() => {
+        nameInputRef.current?.focus();
+      }, 50);
+
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          onClose();
+        }
+      };
+
+      window.addEventListener("keydown", handleKeyDown);
+      return () => {
+        clearTimeout(timer);
+        window.removeEventListener("keydown", handleKeyDown);
+      };
+    }
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      setError("Informe o nome da categoria.");
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setError("O nome da categoria é obrigatório.");
       return;
     }
 
     try {
-      setLoading(true);
+      setIsLoading(true);
       setError(null);
+
       const created = await categoriesApi.create({
-        name: name.trim(),
+        name: trimmedName,
         description: description.trim() || undefined,
         color,
       });
+
       onSuccess(created);
-      setName("");
-      setDescription("");
       onClose();
-    } catch (err: any) {
-      setError(err.message || "Erro ao criar categoria.");
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === "object" && err !== null && "detail" in err
+          ? String((err as { detail: unknown }).detail)
+          : "Erro ao criar categoria no almoxarifado.";
+      setError(message);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="category-modal-title"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+    >
+      <div
+        ref={modalRef}
+        className={cn(
+          "w-full max-w-lg bg-white border border-zinc-200 rounded",
+          "flex flex-col select-none antialiased"
+        )}
+      >
+        {/* Cabeçalho da Bancada */}
+        <div className="h-12 px-4 border-b border-zinc-200 bg-zinc-50 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Tag className="w-5 h-5 text-indigo-600" />
-            <h3 className="font-semibold text-slate-800">Nova Categoria</h3>
+            <Tag className="w-4 h-4 text-zinc-900" aria-hidden="true" />
+            <h3
+              id="category-modal-title"
+              className="text-xs font-mono font-bold uppercase tracking-wider text-zinc-900"
+            >
+              Nova Categoria // Catálogo N:N
+            </h3>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
-            <X className="w-5 h-5" />
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar modal"
+            className={cn(
+              "p-1 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-200/60 rounded transition-colors",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950"
+            )}
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        {/* Corpo do Formulário */}
+        <form onSubmit={handleSubmit} className="p-4 space-y-4">
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl">
-              {error}
+            <div
+              role="alert"
+              className="p-3 border border-rose-200 bg-rose-50 text-rose-800 text-xs rounded flex items-start gap-2"
+            >
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+              <span>{error}</span>
             </div>
           )}
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">
-              Nome da Categoria *
+          {/* Campo: Nome da Categoria */}
+          <div className="space-y-1">
+            <label
+              htmlFor="category-name-input"
+              className="block text-xs font-mono uppercase tracking-wider text-zinc-700"
+            >
+              Nome da Categoria <span className="text-rose-600">*</span>
             </label>
             <input
+              ref={nameInputRef}
+              id="category-name-input"
               type="text"
               required
-              placeholder="Ex: Embalagens, Eletrônicos..."
+              maxLength={100}
+              placeholder="Ex: EPIs, Soldagem, Rolamentos, Químicos..."
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 text-sm"
+              disabled={isLoading}
+              className={cn(
+                "w-full h-9 px-3 text-xs bg-white text-zinc-950 border border-zinc-300 rounded",
+                "placeholder:text-zinc-400 transition-colors",
+                "focus:outline-none focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950",
+                "disabled:bg-zinc-100 disabled:text-zinc-500"
+              )}
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">
-              Descrição (Opcional)
+          {/* Campo: Descrição */}
+          <div className="space-y-1">
+            <label
+              htmlFor="category-description-input"
+              className="block text-xs font-mono uppercase tracking-wider text-zinc-700"
+            >
+              Descrição Técnica (Opcional)
             </label>
             <textarea
+              id="category-description-input"
               rows={2}
-              placeholder="Breve descrição da categoria..."
+              maxLength={255}
+              placeholder="Finalidade de agrupamento operacional ou normas aplicáveis..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 text-sm"
+              disabled={isLoading}
+              className={cn(
+                "w-full p-2.5 text-xs bg-white text-zinc-950 border border-zinc-300 rounded",
+                "placeholder:text-zinc-400 transition-colors resize-none",
+                "focus:outline-none focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950",
+                "disabled:bg-zinc-100 disabled:text-zinc-500"
+              )}
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
-              Cor de Identificação
+          {/* Seletor: Paleta Industrial */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-mono uppercase tracking-wider text-zinc-700">
+              Paleta Industrial de Identificação
             </label>
-            <div className="flex items-center gap-2 flex-wrap">
-              {PRESET_COLORS.map((c) => (
-                <button
-                  type="button"
-                  key={c}
-                  onClick={() => setColor(c)}
-                  className={`w-7 h-7 rounded-full border-2 transition-all ${
-                    color === c ? "border-slate-800 scale-110 shadow-sm" : "border-transparent hover:scale-105"
-                  }`}
-                  style={{ backgroundColor: c }}
-                />
-              ))}
+            <div
+              role="radiogroup"
+              aria-label="Cores industriais"
+              className="grid grid-cols-4 sm:grid-cols-8 gap-2"
+            >
+              {INDUSTRIAL_PALETTE.map((p) => {
+                const isSelected = color === p.color;
+                return (
+                  <button
+                    key={p.color}
+                    type="button"
+                    role="radio"
+                    aria-checked={isSelected}
+                    title={p.label}
+                    onClick={() => setColor(p.color)}
+                    disabled={isLoading}
+                    className={cn(
+                      "h-8 flex items-center justify-center rounded border transition-all",
+                      isSelected
+                        ? "border-zinc-950 ring-2 ring-zinc-950 ring-offset-1"
+                        : "border-zinc-300 hover:border-zinc-400 hover:bg-zinc-50"
+                    )}
+                  >
+                    <span
+                      className="w-4 h-4 rounded-xs"
+                      style={{ backgroundColor: p.color }}
+                      aria-hidden="true"
+                    />
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <span className="text-[11px] font-mono text-zinc-500">Preview:</span>
+              <span
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-xs font-medium"
+                style={{
+                  backgroundColor: `${color}15`,
+                  borderColor: `${color}40`,
+                  color: color,
+                }}
+              >
+                <span className="w-1.5 h-1.5 rounded-xs" style={{ backgroundColor: color }} />
+                {name.trim() || "Nova Categoria"}
+              </span>
             </div>
           </div>
 
-          <div className="pt-2 flex justify-end gap-3">
-            <button
+          {/* Barra de Ações do Rodapé */}
+          <div className="pt-3 border-t border-zinc-200 flex items-center justify-end gap-2">
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors"
+              disabled={isLoading}
             >
               Cancelar
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              disabled={loading}
-              className="px-5 py-2.5 rounded-xl text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-50"
+              variant="solid"
+              size="sm"
+              isLoading={isLoading}
+              data-testid="category-modal-submit-button"
             >
-              {loading ? "Criando..." : "Salvar Categoria"}
-            </button>
+              Salvar Categoria
+            </Button>
           </div>
         </form>
       </div>
     </div>
   );
 };
+
+CategoryModal.displayName = "CategoryModal";

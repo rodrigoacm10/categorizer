@@ -1,115 +1,545 @@
-from sqlalchemy.orm import Session
+from datetime import datetime, timezone, timedelta
+from decimal import Decimal
+from typing import List, Optional, Union, Iterator
+import csv
+import io
+from uuid import UUID
 from fastapi import HTTPException, status
-from typing import List, Optional
-from app.modules.products.infrastructure.models import Product
-from app.modules.inventory.infrastructure.models import StockMovement
-from app.modules.inventory.application.dtos import (
-    CreateStockMovementDto, StockMovementResponseDto, MovementTypeEnum
+from sqlalchemy.orm import Session
+
+from app.modules.inventory.domain.enums import MovementType
+from app.modules.inventory.domain.exceptions import (
+    InsufficientStockError,
+    InvalidMovementError,
 )
+from app.modules.inventory.infrastructure.models import StockMovementModel
+from app.modules.inventory.infrastructure.unit_of_work import InventoryUnitOfWork
+from app.modules.inventory.application.dtos import (
+    CreateStockMovementDto,
+    StockMovementResponseDto,
+    ProductBalanceResponseDto,
+    InventorySummaryResponseDto,
+    ProductDiscrepancyDto,
+    InventoryReconciliationReportDto,
+    MovementTypeEnum,
+)
+from app.shared.domain.exceptions import ProductNotFoundError
 from app.shared.utils.scale import to_scaled_int, from_scaled_int
+
+
+class RegisterStockInUseCase:
+    """
+    Caso de Uso: Entrada de Estoque (IN).
+    - Valida quantidade positiva (> 0).
+    - Bloqueia exclusivamente a linha do produto no PostgreSQL com SELECT ... FOR UPDATE.
+    - Incrementa o saldo do produto: balance_after = current_quantity + quantity.
+    - Insere registro imutável no Ledger com tipo IN e delta positivo (+quantity).
+    - Efetua commit atômico e retorna DTO com novo saldo.
+    """
+    def __init__(self, uow: InventoryUnitOfWork):
+        self.uow = uow
+
+    def execute(
+        self,
+        tenant_id: UUID,
+        product_id: Union[UUID, str],
+        quantity: Union[Decimal, float, str, int],
+        reason: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> StockMovementResponseDto:
+        scaled_qty = to_scaled_int(quantity)
+        if scaled_qty <= 0:
+            raise InvalidMovementError("A quantidade de entrada deve ser maior que zero.")
+
+        with self.uow:
+            product = self.uow.get_product_for_update(
+                tenant_id_or_product_id=tenant_id,
+                product_id=product_id,
+                include_inactive=True,
+            )
+            if not product:
+                raise ProductNotFoundError("Produto não encontrado neste tenant.")
+
+            if not product.is_active:
+                raise InvalidMovementError(
+                    f"Não é possível movimentar o estoque do produto '{product.name}' pois ele está inativo/removido."
+                )
+
+            new_balance = product.current_quantity + scaled_qty
+            product.current_quantity = new_balance
+
+            movement = StockMovementModel(
+                tenant_id=tenant_id,
+                product_id=product.id,
+                type=MovementType.IN.value,
+                quantity=scaled_qty,
+                balance_after=new_balance,
+                reason=reason or "Entrada no estoque",
+                idempotency_key=idempotency_key,
+            )
+            self.uow.movements.append(movement)
+            movement.product = product
+
+            return StockMovementResponseDto.from_orm_model(movement)
+
+
+class RegisterStockOutUseCase:
+    """
+    Caso de Uso: Saída de Estoque (OUT).
+    - Valida quantidade positiva (> 0).
+    - Bloqueia exclusivamente a linha do produto no PostgreSQL com SELECT ... FOR UPDATE.
+    - Validação Estrita de Saldo: Se current_quantity < quantity, lança InsufficientStockError (HTTP 422).
+    - Decrementa o saldo do produto: balance_after = current_quantity - quantity.
+    - Insere registro imutável no Ledger com tipo OUT e delta negativo (-quantity).
+    - Efetua commit atômico e retorna DTO com novo saldo.
+    """
+    def __init__(self, uow: InventoryUnitOfWork):
+        self.uow = uow
+
+    def execute(
+        self,
+        tenant_id: UUID,
+        product_id: Union[UUID, str],
+        quantity: Union[Decimal, float, str, int],
+        reason: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> StockMovementResponseDto:
+        scaled_qty = to_scaled_int(quantity)
+        if scaled_qty <= 0:
+            raise InvalidMovementError("A quantidade de saída deve ser maior que zero.")
+
+        with self.uow:
+            product = self.uow.get_product_for_update(
+                tenant_id_or_product_id=tenant_id,
+                product_id=product_id,
+                include_inactive=True,
+            )
+            if not product:
+                raise ProductNotFoundError("Produto não encontrado neste tenant.")
+
+            if not product.is_active:
+                raise InvalidMovementError(
+                    f"Não é possível movimentar o estoque do produto '{product.name}' pois ele está inativo/removido."
+                )
+
+            current_balance = product.current_quantity
+            if current_balance < scaled_qty:
+                raise InsufficientStockError(
+                    product_id=product.id,
+                    current=current_balance,
+                    requested=scaled_qty,
+                    unit=product.unit,
+                )
+
+            new_balance = current_balance - scaled_qty
+            product.current_quantity = new_balance
+
+            movement = StockMovementModel(
+                tenant_id=tenant_id,
+                product_id=product.id,
+                type=MovementType.OUT.value,
+                quantity=-scaled_qty,
+                balance_after=new_balance,
+                reason=reason or "Saída de estoque",
+                idempotency_key=idempotency_key,
+            )
+            self.uow.movements.append(movement)
+            movement.product = product
+
+            return StockMovementResponseDto.from_orm_model(movement)
+
+
+class RegisterStockAdjustmentUseCase:
+    """
+    Caso de Uso: Ajuste Físico de Inventário (ADJUSTMENT).
+    - Valida motivo obrigatório (não nulo nem vazio).
+    - Valida nova quantidade apurada não-negativa (>= 0).
+    - Bloqueia exclusivamente a linha do produto no PostgreSQL com SELECT ... FOR UPDATE.
+    - Calcula delta contábil: Delta = new_quantity - current_quantity (+ ou -).
+    - Atualiza saldo do produto para new_quantity.
+    - Insere registro imutável no Ledger com tipo ADJUSTMENT, quantity=Delta, balance_after=new_quantity.
+    - Efetua commit atômico e retorna confirmação.
+    """
+    def __init__(self, uow: InventoryUnitOfWork):
+        self.uow = uow
+
+    def execute(
+        self,
+        tenant_id: UUID,
+        product_id: Union[UUID, str],
+        new_quantity: Union[Decimal, float, str, int],
+        reason: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> StockMovementResponseDto:
+        if reason is not None and not reason.strip():
+            raise InvalidMovementError("Motivo do ajuste de estoque não pode ser vazio.")
+        effective_reason = reason.strip() if reason and reason.strip() else "Ajuste de inventário"
+
+        scaled_new_qty = to_scaled_int(new_quantity)
+        if scaled_new_qty < 0:
+            raise InvalidMovementError("A nova quantidade do ajuste não pode ser negativa.")
+
+        with self.uow:
+            product = self.uow.get_product_for_update(
+                tenant_id_or_product_id=tenant_id,
+                product_id=product_id,
+                include_inactive=True,
+            )
+            if not product:
+                raise ProductNotFoundError("Produto não encontrado neste tenant.")
+
+            if not product.is_active:
+                raise InvalidMovementError(
+                    f"Não é possível movimentar o estoque do produto '{product.name}' pois ele está inativo/removido."
+                )
+
+            current_balance = product.current_quantity
+            delta = scaled_new_qty - current_balance
+            product.current_quantity = scaled_new_qty
+
+            movement = StockMovementModel(
+                tenant_id=tenant_id,
+                product_id=product.id,
+                type=MovementType.ADJUSTMENT.value,
+                quantity=delta,
+                balance_after=scaled_new_qty,
+                reason=effective_reason,
+                idempotency_key=idempotency_key,
+            )
+            self.uow.movements.append(movement)
+            movement.product = product
+
+            return StockMovementResponseDto.from_orm_model(movement)
+
+
+class ListStockMovementsUseCase:
+    """
+    Caso de Uso: Consulta de Movimentações Contábeis (Extrato do Ledger).
+    - Suporta filtros por produto, tipo de movimentação, período (data inicial/final) e paginação.
+    - Ordenação padrão estrita: cronológica decrescente (created_at DESC).
+    """
+    def __init__(self, uow: InventoryUnitOfWork):
+        self.uow = uow
+
+    def execute(
+        self,
+        tenant_id: UUID,
+        product_id: Optional[Union[UUID, str]] = None,
+        movement_type: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[StockMovementResponseDto]:
+        with self.uow:
+            movements = self.uow.movements.list_all(
+                tenant_id=tenant_id,
+                product_id=product_id,
+                movement_type=movement_type,
+                start_date=start_date,
+                end_date=end_date,
+                limit=limit,
+                offset=offset,
+            )
+            return [StockMovementResponseDto.from_orm_model(m) for m in movements]
+
+    def count(
+        self,
+        tenant_id: UUID,
+        product_id: Optional[Union[UUID, str]] = None,
+        movement_type: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+    ) -> int:
+        with self.uow:
+            return self.uow.movements.count_movements(
+                tenant_id=tenant_id,
+                product_id=product_id,
+                movement_type=movement_type,
+                start_date=start_date,
+                end_date=end_date,
+            )
+
+
+class ExportStockMovementsUseCase:
+    """
+    Caso de Uso: Exportação do Livro-Razão Contábil (Ledger) em CSV.
+    - Exporta histórico completo de movimentações contábeis filtradas por tenant.
+    - Colunas: data_hora_utc, id_movimentacao, id_produto, nome_produto, unidade,
+      tipo_movimentacao, quantidade_formatada, saldo_resultante_formatado, motivo, operador_email.
+    - Retorna gerador iterável (streaming) compatível com StreamingResponse.
+    """
+    def __init__(self, uow: InventoryUnitOfWork):
+        self.uow = uow
+
+    def execute(
+        self,
+        tenant_id: UUID,
+        operator_email: str,
+        product_id: Optional[Union[UUID, str]] = None,
+        movement_type: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+    ) -> Iterator[str]:
+        with self.uow:
+            movements = self.uow.movements.list_all(
+                tenant_id=tenant_id,
+                product_id=product_id,
+                movement_type=movement_type,
+                start_date=start_date,
+                end_date=end_date,
+                limit=None,
+                offset=0,
+            )
+
+            output = io.StringIO()
+            writer = csv.writer(output)
+
+            # Cabeçalho CSV
+            writer.writerow([
+                "data_hora_utc",
+                "id_movimentacao",
+                "id_produto",
+                "nome_produto",
+                "unidade",
+                "tipo_movimentacao",
+                "quantidade_formatada",
+                "saldo_resultante_formatado",
+                "motivo",
+                "operador_email",
+            ])
+            yield output.getvalue()
+            output.seek(0)
+            output.truncate(0)
+
+            for mov in movements:
+                p_name = mov.product.name if mov.product else ""
+                p_unit = mov.product.unit if mov.product else ""
+                created_at_str = mov.created_at.isoformat() if mov.created_at else ""
+                writer.writerow([
+                    created_at_str,
+                    str(mov.id),
+                    str(mov.product_id),
+                    p_name,
+                    p_unit,
+                    str(mov.type),
+                    str(from_scaled_int(mov.quantity)),
+                    str(from_scaled_int(mov.balance_after)),
+                    mov.reason or "",
+                    operator_email,
+                ])
+                yield output.getvalue()
+                output.seek(0)
+                output.truncate(0)
+
+
+class GetProductBalanceUseCase:
+    """
+    Caso de Uso: Consulta de Saldo Atual do Produto.
+    - Retorna o saldo contábil atual, unidades e indicador de estoque baixo.
+    """
+    def __init__(self, uow: InventoryUnitOfWork):
+        self.uow = uow
+
+    def execute(
+        self,
+        tenant_id: UUID,
+        product_id: Union[UUID, str],
+    ) -> ProductBalanceResponseDto:
+        with self.uow:
+            product = self.uow.products.get_by_id(
+                product_id=product_id,
+                tenant_id=tenant_id,
+                include_inactive=True,
+            )
+            if not product:
+                raise ProductNotFoundError("Produto não encontrado neste tenant.")
+
+            is_low = product.is_low_stock() if hasattr(product, "is_low_stock") else (
+                product.min_stock is not None and product.current_quantity <= product.min_stock
+            )
+            min_stock_dec = from_scaled_int(product.min_stock) if product.min_stock is not None else None
+
+            return ProductBalanceResponseDto(
+                product_id=str(product.id),
+                product_name=product.name,
+                unit=product.unit,
+                current_quantity=from_scaled_int(product.current_quantity),
+                current_quantity_scaled=product.current_quantity,
+                is_low_stock=is_low,
+                min_stock=min_stock_dec,
+            )
+
+
+class GetInventorySummaryUseCase:
+    """
+    Caso de Uso: Obtenção de KPIs e Agregações de Estoque e Livro-Razão.
+    - Executa agregação estritamente filtrada por tenant_id.
+    - Consultas otimizadas via SQLAlchemy (SELECT COUNT).
+    - Retorna InventorySummaryResponseDto com:
+      - total_products: Total de produtos ativos no catálogo do tenant.
+      - low_stock_count: Quantidade de produtos ativos onde current_quantity <= min_stock e current_quantity > 0.
+      - out_of_stock_count: Quantidade de produtos ativos onde current_quantity == 0.
+      - movements_today: Total de movimentações contábeis registradas nas últimas 24 horas no tenant.
+    """
+    def __init__(self, uow: InventoryUnitOfWork):
+        self.uow = uow
+
+    def execute(
+        self,
+        tenant_id: Union[UUID, str],
+        since: Optional[datetime] = None,
+    ) -> InventorySummaryResponseDto:
+        t_uuid = UUID(str(tenant_id)) if not isinstance(tenant_id, UUID) else tenant_id
+        if since is None:
+            since = datetime.now(timezone.utc) - timedelta(hours=24)
+
+        with self.uow:
+            summary_data = self.uow.get_inventory_summary(tenant_id=t_uuid, since=since)
+            return InventorySummaryResponseDto(
+                total_products=summary_data["total_products"],
+                low_stock_count=summary_data["low_stock_count"],
+                out_of_stock_count=summary_data["out_of_stock_count"],
+                movements_today=summary_data["movements_today"],
+            )
+
+
+def get_inventory_summary(db: Session, tenant_id: UUID) -> InventorySummaryResponseDto:
+    uow = InventoryUnitOfWork(db)
+    return GetInventorySummaryUseCase(uow).execute(tenant_id=tenant_id)
+
+
+class ReconcileInventoryUseCase:
+    """
+    Caso de Uso: Reconciliação Contábil e Auditoria Matemática do Inventário.
+    - Executa agregação SQL atômica calculando a soma dos deltas de stock_movements
+      por produto para o tenant_id ativo.
+    - Compara com current_quantity de products.
+    - Se houver discrepância, lista o detalhe; se não houver, retorna is_reconciled=True e discrepancies=[].
+    - Isolamento estrito por tenant_id.
+    """
+    def __init__(self, uow_or_db: Union[InventoryUnitOfWork, Session]):
+        if isinstance(uow_or_db, Session):
+            self.uow = InventoryUnitOfWork(uow_or_db)
+        else:
+            self.uow = uow_or_db
+
+    def execute(self, tenant_id: Union[UUID, str]) -> InventoryReconciliationReportDto:
+        t_uuid = UUID(str(tenant_id)) if not isinstance(tenant_id, UUID) else tenant_id
+
+        with self.uow:
+            rows = self.uow.reconcile_inventory(t_uuid)
+
+        discrepancies: List[ProductDiscrepancyDto] = []
+        for r in rows:
+            product_id = r["product_id"]
+            product_name = r["product_name"]
+            curr_scaled = r["current_quantity_scaled"]
+            exp_scaled = r["expected_quantity_scaled"]
+            diff_scaled = curr_scaled - exp_scaled
+
+            if diff_scaled != 0:
+                discrepancy = ProductDiscrepancyDto(
+                    product_id=product_id,
+                    product_name=product_name,
+                    current_quantity=float(from_scaled_int(curr_scaled)),
+                    expected_quantity=float(from_scaled_int(exp_scaled)),
+                    difference=float(from_scaled_int(diff_scaled)),
+                    has_discrepancy=True,
+                )
+                discrepancies.append(discrepancy)
+
+        total_checked = len(rows)
+        discrepant_count = len(discrepancies)
+        is_reconciled = (discrepant_count == 0)
+
+        return InventoryReconciliationReportDto(
+            tenant_id=t_uuid,
+            total_products_checked=total_checked,
+            discrepant_products_count=discrepant_count,
+            is_reconciled=is_reconciled,
+            discrepancies=discrepancies,
+            generated_at=datetime.now(timezone.utc),
+        )
+
+
+def reconcile_inventory(db: Session, tenant_id: UUID) -> InventoryReconciliationReportDto:
+    return ReconcileInventoryUseCase(db).execute(tenant_id=tenant_id)
+
+
+
+
+# Aliases e compatibilidade com chamadas procedurais legadas
+GetLedgerUseCase = ListStockMovementsUseCase
+
 
 def process_stock_movement(
     db: Session,
     dto: CreateStockMovementDto,
-    idempotency_key: Optional[str] = None
+    tenant_id: UUID,
+    idempotency_key: Optional[str] = None,
 ) -> StockMovementResponseDto:
-    # Busca o produto com lock transacional
-    product = db.query(Product).filter(Product.id == dto.product_id).with_for_update().first()
-    if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Produto não encontrado."
+    uow = InventoryUnitOfWork(db)
+    m_type = dto.type.value if hasattr(dto.type, "value") else str(dto.type)
+
+    if m_type == MovementType.IN.value:
+        return RegisterStockInUseCase(uow).execute(
+            tenant_id=tenant_id,
+            product_id=dto.product_id,
+            quantity=dto.quantity,
+            reason=dto.reason,
+            idempotency_key=idempotency_key,
         )
-
-    if not product.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Não é possível movimentar o estoque do produto '{product.name}' pois ele está inativo/removido."
+    elif m_type == MovementType.OUT.value:
+        try:
+            return RegisterStockOutUseCase(uow).execute(
+                tenant_id=tenant_id,
+                product_id=dto.product_id,
+                quantity=dto.quantity,
+                reason=dto.reason,
+                idempotency_key=idempotency_key,
+            )
+        except InsufficientStockError as err:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=err.problem_detail,
+            )
+    elif m_type == MovementType.ADJUSTMENT.value:
+        return RegisterStockAdjustmentUseCase(uow).execute(
+            tenant_id=tenant_id,
+            product_id=dto.product_id,
+            new_quantity=dto.quantity,
+            reason=dto.reason,
+            idempotency_key=idempotency_key,
         )
-
-    scaled_qty = to_scaled_int(dto.quantity)
-    current_balance = product.current_quantity
-
-    if dto.type == MovementTypeEnum.IN:
-        if scaled_qty <= 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="A quantidade de entrada deve ser maior que zero."
-            )
-        delta = scaled_qty
-        new_balance = current_balance + delta
-
-    elif dto.type == MovementTypeEnum.OUT:
-        if scaled_qty <= 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="A quantidade de saída deve ser maior que zero."
-            )
-        if current_balance < scaled_qty:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Saldo insuficiente. Saldo disponível: {from_scaled_int(current_balance)} {product.unit}, solicitado para saída: {from_scaled_int(scaled_qty)} {product.unit}."
-            )
-        delta = -scaled_qty
-        new_balance = current_balance - scaled_qty
-
-    elif dto.type == MovementTypeEnum.ADJUSTMENT:
-        if scaled_qty < 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="A nova quantidade do ajuste não pode ser negativa."
-            )
-        delta = scaled_qty - current_balance
-        new_balance = scaled_qty
-
     else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Tipo de movimentação inválido: {dto.type}"
-        )
+        raise InvalidMovementError(f"Tipo de movimentação inválido: {dto.type}")
 
-    # Atualiza saldo do produto
-    product.current_quantity = new_balance
 
-    # Grava registro imutável no Ledger
-    movement = StockMovement(
-        product_id=product.id,
-        type=dto.type.value,
-        quantity=delta,
-        balance_after=new_balance,
-        reason=dto.reason or ("Entrada no estoque" if dto.type == MovementTypeEnum.IN else "Saída de estoque" if dto.type == MovementTypeEnum.OUT else "Ajuste de inventário"),
-        idempotency_key=idempotency_key
-    )
-    db.add(movement)
-    db.commit()
-    db.refresh(movement)
+def get_product_ledger(
+    db: Session,
+    product_id: str,
+    tenant_id: UUID,
+) -> List[StockMovementResponseDto]:
+    uow = InventoryUnitOfWork(db)
+    with uow:
+        product = uow.products.get_by_id(product_id=product_id, tenant_id=tenant_id, include_inactive=True)
+        if not product:
+            raise ProductNotFoundError("Produto não encontrado neste tenant.")
+        return ListStockMovementsUseCase(uow).execute(tenant_id=tenant_id, product_id=product_id)
 
-    return StockMovementResponseDto.from_orm_model(movement)
-
-def get_product_ledger(db: Session, product_id: str) -> List[StockMovementResponseDto]:
-    # Permite ver o histórico mesmo se o produto estiver inativo (requisito de auditoria)
-    product = db.query(Product).filter(Product.id == product_id).first()
-    if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Produto não encontrado."
-        )
-
-    movements = db.query(StockMovement).filter(
-        StockMovement.product_id == product_id
-    ).order_by(StockMovement.created_at.desc()).all()
-
-    return [StockMovementResponseDto.from_orm_model(m) for m in movements]
 
 def list_all_movements(
     db: Session,
+    tenant_id: UUID,
     limit: int = 100,
     offset: int = 0,
-    movement_type: Optional[str] = None
+    movement_type: Optional[str] = None,
 ) -> List[StockMovementResponseDto]:
-    query = db.query(StockMovement)
-    if movement_type:
-        query = query.filter(StockMovement.type == movement_type.upper())
-
-    movements = query.order_by(StockMovement.created_at.desc()).offset(offset).limit(limit).all()
-    return [StockMovementResponseDto.from_orm_model(m) for m in movements]
+    uow = InventoryUnitOfWork(db)
+    return ListStockMovementsUseCase(uow).execute(
+        tenant_id=tenant_id,
+        movement_type=movement_type,
+        limit=limit,
+        offset=offset,
+    )

@@ -1,3 +1,5 @@
+import json
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 
@@ -22,7 +24,39 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
     ]
     
+    # Security & JWT
+    SECRET_KEY: str = "estoque-secret-key-super-secure-production-ready-2026-minimum-32-bytes"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60  # 3600 seconds
+
     # Idempotency window in seconds for deduplication
     IDEMPOTENCY_EXPIRATION_HOURS: int = 24
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v):
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("[") and v.endswith("]"):
+                try:
+                    return json.loads(v)
+                except Exception:
+                    pass
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def validate_database_url(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("DATABASE_URL não pode ser vazia.")
+        if v.startswith("postgres://"):
+            v = v.replace("postgres://", "postgresql://", 1)
+        valid_schemes = ("postgresql://", "postgresql+psycopg2://")
+        if not any(v.startswith(scheme) for scheme in valid_schemes):
+            raise ValueError(
+                f"DATABASE_URL inválida. Deve iniciar com um dos esquemas suportados do PostgreSQL: {valid_schemes}"
+            )
+        return v
 
 settings = Settings()

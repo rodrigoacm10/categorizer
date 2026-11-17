@@ -3,11 +3,11 @@
 ---
 
 ## 1. Identificação da Tarefa
-- **Identificador:** `TASK-03`
-- **Nome:** Módulo de Gestão de Catálogo de Produtos e Categorias
-- **Escopo:** Entidades de Domínio, Relacionamento N:N, DTOs com Escala Inteira $10^3$, Soft-Delete Contábil e Endpoints RESTful
+- **Identificador:** `TASK-04` (anteriormente `TASK-03`)
+- **Nome:** Módulo de Gestão de Catálogo de Produtos e Categorias Multi-Tenant
+- **Escopo:** Entidades de Domínio com `tenant_id`, Relacionamento N:N, DTOs com Escala Inteira $10^3$, Soft-Delete Contábil e Endpoints RESTful com Contexto de Tenant
 - **Responsável:** `code_implementer` (supervisionado por `orchestrator`)
-- **Status:** Planejada / Depende da Task 1 e Task 2
+- **Status:** Planejada / Depende da Task 2 (Auth & Tenancy) e Task 3 (Idempotência)
 - **Requisito Mandatório de Qualidade:** **Cobertura de testes unitários e de integração $\ge 80\%$** aferida via `pytest-cov`.
 
 ---
@@ -26,8 +26,8 @@ O catálogo de produtos físicos possui particularidades críticas que diferem d
 
 ### 3.1. RF-01: Domínio e Entidades Puras
 - Em `app/modules/products/domain/entities.py`:
-  - `Category`: `id: UUID`, `name: str`, `description: Optional[str]`, `color: Optional[str]`, `created_at: datetime`.
-  - `Product`: `id: UUID`, `name: str`, `description: Optional[str]`, `unit: str` (maiúsculas padronizadas), `current_quantity: int` (escala x1000), `min_stock: Optional[int]`, `is_active: bool`, `categories: List[Category]`, timestamps.
+  - `Category`: `id: UUID`, `tenant_id: UUID`, `name: str`, `description: Optional[str]`, `color: Optional[str]`, `created_at: datetime`.
+  - `Product`: `id: UUID`, `tenant_id: UUID`, `name: str`, `description: Optional[str]`, `unit: str` (maiúsculas padronizadas), `current_quantity: int` (escala x1000), `min_stock: Optional[int]`, `is_active: bool`, `categories: List[Category]`, timestamps.
 - Métodos de Domínio em `Product`:
   - `is_low_stock() -> bool`: Retorna `True` se `min_stock is not None and current_quantity <= min_stock`.
   - `deactivate(reason: str)`: Atualiza `is_active = False` e `deleted_at = now_utc`.

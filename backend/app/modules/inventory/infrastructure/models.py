@@ -1,14 +1,14 @@
-from sqlalchemy import Column, String, BigInteger, Text, DateTime, ForeignKey
+from sqlalchemy import Column, String, BigInteger, Text, DateTime, ForeignKey, Index
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
 from datetime import datetime, timezone
 from app.shared.infrastructure.database import Base
 
+
 def utc_now():
     return datetime.now(timezone.utc)
 
-def generate_uuid():
-    return str(uuid.uuid4())
 
 class StockMovement(Base):
     """
@@ -17,8 +17,9 @@ class StockMovement(Base):
     """
     __tablename__ = "stock_movements"
 
-    id = Column(String(36), primary_key=True, default=generate_uuid)
-    product_id = Column(String(36), ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False, index=True)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"), nullable=False, index=True)
     
     # IN (Entrada), OUT (Saída), ADJUSTMENT (Ajuste), PRODUCT_DELETED (Registro de remoção)
     type = Column(String(32), nullable=False)
@@ -31,6 +32,14 @@ class StockMovement(Base):
     
     reason = Column(Text, nullable=True)
     idempotency_key = Column(String(255), nullable=True, index=True)
-    created_at = Column(DateTime, default=utc_now, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False, index=True)
 
     product = relationship("Product", back_populates="movements")
+    tenant = relationship("TenantModel")
+
+    __table_args__ = (
+        Index("ix_stock_movements_tenant_created", "tenant_id", "created_at"),
+    )
+
+
+StockMovementModel = StockMovement
