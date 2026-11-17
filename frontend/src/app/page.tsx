@@ -148,9 +148,15 @@ export default function LandingPage() {
               </span>
             </div>
 
-            <Link href="/workbench">
+            <Link href="/login">
+              <Button variant="outline" size="sm">
+                Entrar
+              </Button>
+            </Link>
+
+            <Link href="/dashboard">
               <Button variant="solid" size="sm" rightIcon={<ArrowRight className="w-3.5 h-3.5" />}>
-                Abrir Console Operacional
+                Abrir Bancada
               </Button>
             </Link>
           </div>
@@ -182,9 +188,14 @@ export default function LandingPage() {
 
             {/* Botões de Ação */}
             <div className="pt-2 flex flex-wrap items-center gap-3">
-              <Link href="/workbench">
+              <Link href="/dashboard">
                 <Button variant="solid" size="md" rightIcon={<ArrowRight className="w-4 h-4" />}>
                   Acessar Bancada Operacional
+                </Button>
+              </Link>
+              <Link href="/login">
+                <Button variant="outline" size="md">
+                  Login de Operador
                 </Button>
               </Link>
               <a href="#simulador">
@@ -263,10 +274,10 @@ export default function LandingPage() {
                 <span>Zero linhas deletadas. Zero saldos sobrescritos.</span>
               </div>
               <Link
-                href="/workbench"
+                href="/dashboard"
                 className="font-mono text-[11px] text-zinc-700 hover:text-zinc-950 font-semibold flex items-center gap-1"
               >
-                <span>Ver Workbench em execução</span>
+                <span>Ver Bancada em execução</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </Link>
             </div>
@@ -700,14 +711,23 @@ export default function LandingPage() {
           </p>
 
           <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
-            <Link href="/workbench">
+            <Link href="/dashboard">
               <Button
                 variant="solid"
                 size="md"
                 className="bg-white text-zinc-950 hover:bg-zinc-100 border-white font-bold"
                 rightIcon={<ArrowRight className="w-4 h-4" />}
               >
-                Abrir Workbench Operacional
+                Abrir Bancada Operacional
+              </Button>
+            </Link>
+            <Link href="/register">
+              <Button
+                variant="outline"
+                size="md"
+                className="border-zinc-700 text-zinc-200 hover:bg-zinc-900"
+              >
+                Criar Nova Conta
               </Button>
             </Link>
           </div>
