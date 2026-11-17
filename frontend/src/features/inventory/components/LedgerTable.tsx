@@ -283,7 +283,7 @@ export const LedgerTable: React.FC<LedgerTableProps> = ({
             ) : (
               movements.map((movement) => {
                 const effectiveUnit = movement.product_unit || "UN";
-                const productName = movement.product_name || movement.product_id;
+                const productName = movement.product_name || "Produto não identificado";
                 const formattedBalance = formatQuantity(movement.balance_after);
 
                 return (

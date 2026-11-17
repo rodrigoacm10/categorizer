@@ -61,20 +61,15 @@ export default function InventoryMovePage() {
 
       {/* Conteúdo Principal */}
       <main className="flex-1 p-4 sm:p-6 md:p-8 max-w-4xl mx-auto w-full">
-        {/* Título e Metadados Técnicos da Bancada */}
+        {/* Título da Bancada */}
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-100 pb-4">
           <div>
             <h1 className="text-base font-bold text-zinc-950 uppercase tracking-wide flex items-center gap-2">
               <span>Bancada de Movimentação Física</span>
             </h1>
             <p className="text-xs text-zinc-500 mt-0.5">
-              Terminal de alta velocidade para entradas, saídas e contagem de inventário com bloqueio pessimista e idempotência RFC 9474.
+              Terminal para entradas, saídas e ajustes de inventário com validação de saldo em tempo real.
             </p>
-          </div>
-
-          <div className="flex items-center gap-2 text-[11px] font-mono text-zinc-500 shrink-0">
-            <Terminal className="w-3.5 h-3.5 text-zinc-400" />
-            <span>OPERATE MODE // FT-15 & FT-16</span>
           </div>
         </div>
 

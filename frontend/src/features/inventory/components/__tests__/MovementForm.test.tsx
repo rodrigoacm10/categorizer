@@ -45,7 +45,7 @@ describe("MovementForm (FT-15 & FT-16)", () => {
     current_quantity_scaled: 50000,
     is_low_stock: false,
     is_active: true,
-    categories: [{ id: "cat-1", name: "Elétrica", created_at: "" }],
+    categories: [{ id: "cat-1", name: "Elétrica", color: "#2563EB", created_at: "" }],
     created_at: "2026-11-13T10:00:00Z",
     updated_at: "2026-11-13T10:00:00Z",
   };

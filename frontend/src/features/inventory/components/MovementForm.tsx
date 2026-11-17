@@ -295,7 +295,7 @@ export function MovementForm({
           htmlFor="barcode-search-input"
           className="block text-xs font-semibold text-zinc-700 tracking-wide mb-1.5"
         >
-          Leitor de Código de Barras / SKU / ID do Produto
+          Leitor de Código de Barras / Busca de Produto
         </label>
         <div className="flex gap-2">
           <div className="relative flex-1">
@@ -356,7 +356,7 @@ export function MovementForm({
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-mono uppercase px-1.5 py-0.5 bg-zinc-100 text-zinc-700 border border-zinc-200">
-                  ID: {selectedProduct.id}
+                  Unidade: {selectedProduct.unit}
                 </span>
                 <span className="text-xs text-zinc-500">
                   {selectedProduct.categories?.map((c) => c.name).join(", ") ||

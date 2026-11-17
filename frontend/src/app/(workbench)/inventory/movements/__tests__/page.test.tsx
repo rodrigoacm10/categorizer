@@ -52,6 +52,7 @@ describe("InventoryMovementsPage (/inventory/movements - FT-17)", () => {
     id: "tenant-123",
     name: "Almoxarifado Central",
     slug: "central",
+    is_active: true,
     created_at: "2026-11-13T10:00:00Z",
     updated_at: "2026-11-13T10:00:00Z",
   };
@@ -137,7 +138,7 @@ describe("InventoryMovementsPage (/inventory/movements - FT-17)", () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText("central")).toBeDefined();
+      expect(screen.getByText("Almoxarifado Central")).toBeDefined();
     });
 
     const exportBtn = screen.getByTestId("export-csv-button");

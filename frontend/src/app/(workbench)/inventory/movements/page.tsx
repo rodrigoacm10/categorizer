@@ -66,7 +66,8 @@ function InventoryMovementsContent() {
     staleTime: 5 * 60 * 1000,
   });
   const currentTenant = tenants.find((t) => t.id === tenantId);
-  const tenantSlug = currentTenant?.slug || tenantId || "almoxarifado";
+  const tenantSlug = currentTenant?.slug || "almoxarifado";
+  const tenantDisplayName = currentTenant?.name;
 
   // 5. Consulta de Produtos do Tenant para alimentar o seletor de filtros
   const { data: products = [], isLoading: isLoadingProducts } = useQuery({
@@ -170,10 +171,14 @@ function InventoryMovementsContent() {
               <h1 className="text-base font-semibold text-zinc-950 tracking-tight">
                 Extrato Geral do Livro-Razão
               </h1>
-              <span className="text-zinc-300 font-mono text-xs">//</span>
-              <span className="text-xs font-mono text-zinc-500 uppercase tracking-wider">
-                {tenantSlug}
-              </span>
+              {tenantDisplayName && (
+                <>
+                  <span className="text-zinc-300 font-mono text-xs">//</span>
+                  <span className="text-xs font-mono text-zinc-500 uppercase tracking-wider">
+                    {tenantDisplayName}
+                  </span>
+                </>
+              )}
             </div>
             <p className="text-xs text-zinc-500">
               Registro perpétuo, imutável e auditável de todos os lançamentos físicos de estoque (Append-Only).
