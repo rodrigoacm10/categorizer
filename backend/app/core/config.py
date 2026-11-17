@@ -1,7 +1,7 @@
 import json
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import List
+from typing import List, Union
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     QUANTITY_SCALE: int = 1000  # 1 unidade = 1000 (3 casas decimais)
     
     # CORS
-    CORS_ORIGINS: List[str] = [
+    CORS_ORIGINS: Union[str, List[str]] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "http://localhost:5173",
@@ -32,18 +32,24 @@ class Settings(BaseSettings):
     # Idempotency window in seconds for deduplication
     IDEMPOTENCY_EXPIRATION_HOURS: int = 24
 
-    @field_validator("CORS_ORIGINS", mode="before")
+    @field_validator("CORS_ORIGINS")
     @classmethod
-    def parse_cors_origins(cls, v):
+    def parse_cors_origins(cls, v) -> List[str]:
         if isinstance(v, str):
             v = v.strip()
+            if not v:
+                return []
             if v.startswith("[") and v.endswith("]"):
                 try:
-                    return json.loads(v)
+                    parsed = json.loads(v)
+                    if isinstance(parsed, list):
+                        return [str(item).strip() for item in parsed if item]
                 except Exception:
                     pass
             return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return v
+        elif isinstance(v, list):
+            return [str(item).strip() for item in v if item]
+        return []
 
     @field_validator("DATABASE_URL")
     @classmethod
