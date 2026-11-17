@@ -56,9 +56,14 @@ class Settings(BaseSettings):
     def validate_database_url(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError("DATABASE_URL não pode ser vazia.")
+        v = v.strip()
         if v.startswith("postgres://"):
-            v = v.replace("postgres://", "postgresql://", 1)
-        valid_schemes = ("postgresql://", "postgresql+psycopg2://")
+            v = v.replace("postgres://", "postgresql+psycopg2://", 1)
+        elif v.startswith("postgresql://"):
+            v = v.replace("postgresql://", "postgresql+psycopg2://", 1)
+        elif v.startswith("postgresql+psycopg://"):
+            v = v.replace("postgresql+psycopg://", "postgresql+psycopg2://", 1)
+        valid_schemes = ("postgresql+psycopg2://", "postgresql://")
         if not any(v.startswith(scheme) for scheme in valid_schemes):
             raise ValueError(
                 f"DATABASE_URL inválida. Deve iniciar com um dos esquemas suportados do PostgreSQL: {valid_schemes}"
