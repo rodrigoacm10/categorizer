@@ -8,7 +8,7 @@ export interface CanProps {
   I: ActionType;
   role?: TenantRole;
   fallback?: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
 }
 
 /**

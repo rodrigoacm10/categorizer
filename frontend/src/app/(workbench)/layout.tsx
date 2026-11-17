@@ -178,14 +178,12 @@ export default function WorkbenchLayout({ children }: WorkbenchLayoutProps) {
               })}
             </div>
 
-            {/* Informações Técnicas da Bancada */}
+            {/* Informações da Bancada */}
             <div className="hidden lg:flex items-center gap-3 text-[11px] font-mono text-zinc-500">
               <span className="flex items-center gap-1.5">
                 <Terminal className="w-3 h-3 text-zinc-400" />
-                <span>ESCALA: 10³</span>
+                <span>CONTROLE DE ESTOQUE</span>
               </span>
-              <span className="text-zinc-300">|</span>
-              <span>LEDGER IMUTÁVEL</span>
             </div>
           </nav>
         )}
@@ -204,9 +202,7 @@ export default function WorkbenchLayout({ children }: WorkbenchLayoutProps) {
           <span>BANCADA OPERACIONAL</span>
         </div>
         <div className="flex items-center gap-3">
-          <span>RFC 9474 IDEMPOTENCY</span>
-          <span className="text-zinc-300">|</span>
-          <span>RFC 7807 ERRORS</span>
+          <span>SISTEMA DE GESTÃO DE ALMOXARIFADO</span>
         </div>
       </footer>
     </div>
