@@ -26,8 +26,8 @@ from app.modules.idempotency.infrastructure.models import IdempotencyRecordModel
 # access to the values within the .ini file in use.
 config = context.config
 
-# Seta a URL dinâmica diretamente do settings do projeto
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# Seta a URL dinâmica diretamente do settings do projeto (escapando % para o configparser)
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
 # Interpret the config file for Python logging.
 if config.config_file_name is not None:
