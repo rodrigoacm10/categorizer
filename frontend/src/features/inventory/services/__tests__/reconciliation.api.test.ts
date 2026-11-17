@@ -37,7 +37,7 @@ describe("reconciliationApi", () => {
 
     const result = await reconciliationApi.getReconciliationReport(tenantId);
 
-    expect(api.get).toHaveBeenCalledWith("/api/inventory/reconciliation", {
+    expect(api.get).toHaveBeenCalledWith("/inventory/reconciliation", {
       tenantId,
     });
     expect(result).toEqual(mockReport);

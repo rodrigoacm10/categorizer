@@ -17,7 +17,7 @@ export const reconciliationApi = {
       throw new Error("Identificador do almoxarifado (tenantId) é obrigatório para reconciliação.");
     }
 
-    return api.get<InventoryReconciliationReport>("/api/inventory/reconciliation", {
+    return api.get<InventoryReconciliationReport>("/inventory/reconciliation", {
       tenantId,
     });
   },

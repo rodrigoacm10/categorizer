@@ -53,7 +53,11 @@ function buildUrl(endpoint: string, params?: Record<string, unknown>): string {
     fullUrl = endpoint;
   } else {
     const base = API_BASE_URL.endsWith("/") ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
-    const path = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+    const rawPath = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+    const path =
+      base.endsWith("/api") && (rawPath === "/api" || rawPath.startsWith("/api/"))
+        ? rawPath.slice(4) || "/"
+        : rawPath;
     fullUrl = `${base}${path}`;
   }
 
