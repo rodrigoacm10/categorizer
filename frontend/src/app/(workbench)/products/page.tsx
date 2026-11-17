@@ -114,10 +114,6 @@ export default function ProductsPage() {
             <h1 className="text-base font-semibold text-zinc-950 tracking-tight">
               Catálogo de Produtos Físicos
             </h1>
-            <span className="text-zinc-300 font-mono text-xs">//</span>
-            <span className="text-xs font-mono text-zinc-500 uppercase tracking-wider">
-              {tenantId || "ALMOXARIFADO"}
-            </span>
           </div>
           <p className="text-xs text-zinc-500">
             Controle de itens armazenados, saldo contábil em tempo real e pontos de reposição.

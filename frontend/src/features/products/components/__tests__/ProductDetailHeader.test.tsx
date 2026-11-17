@@ -28,15 +28,13 @@ describe("ProductDetailHeader (FT-14)", () => {
     updated_at: "2026-11-13T10:00:00Z",
   };
 
-  it("renderiza os dados de identificação, nome, SKU/ID e categorias", () => {
+  it("renderiza os dados de identificação, nome, unidade e categorias", () => {
     render(<ProductDetailHeader product={mockProduct} />);
 
     expect(screen.getByTestId("product-detail-name").textContent).toBe(
       "Cabo de Aço Galvanizado 6x19 8mm"
     );
-    expect(screen.getByTestId("product-detail-id").textContent).toBe(
-      "prod-abc-123"
-    );
+    expect(screen.getByTestId("product-detail-unit").textContent).toBe("M");
     expect(screen.getByTestId("product-detail-description").textContent).toContain(
       "Cabo para içamento de carga"
     );

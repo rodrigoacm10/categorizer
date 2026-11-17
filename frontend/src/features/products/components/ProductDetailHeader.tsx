@@ -102,15 +102,10 @@ export const ProductDetailHeader: React.FC<ProductDetailHeaderProps> = ({
             )}
           </div>
 
-          {/* SKU / Identificador UUID e Unidade */}
+          {/* Unidade de Medida */}
           <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-500 font-mono">
-            <div className="flex items-center gap-1" title="Identificador Único do Produto">
-              <Hash className="w-3.5 h-3.5 text-zinc-400" />
-              <span data-testid="product-detail-id">{product.id}</span>
-            </div>
-            <span className="text-zinc-300">•</span>
             <div>
-              UOM: <span className="font-semibold text-zinc-700">{product.unit}</span>
+              Unidade de Medida: <span className="font-semibold text-zinc-700" data-testid="product-detail-unit">{product.unit}</span>
             </div>
           </div>
 
