@@ -156,7 +156,7 @@ export function TenantList({
                       )}
                     </div>
                     <p className="font-mono text-xs text-zinc-500">
-                      ID: {tenant.slug}
+                      /{tenant.slug}
                     </p>
                   </div>
 

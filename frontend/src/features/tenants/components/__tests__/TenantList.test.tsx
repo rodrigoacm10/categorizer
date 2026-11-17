@@ -93,8 +93,8 @@ describe("TenantList (FT-07)", () => {
     expect(screen.getByText("ALMOXARIFE")).toBeDefined();
 
     // Slugs
-    expect(screen.getByText("ID: matriz-central")).toBeDefined();
-    expect(screen.getByText("ID: unidade-pecas")).toBeDefined();
+    expect(screen.getByText("/matriz-central")).toBeDefined();
+    expect(screen.getByText("/unidade-pecas")).toBeDefined();
   });
 
   it("ao selecionar um almoxarifado, atualiza o contexto global e redireciona para /dashboard", async () => {

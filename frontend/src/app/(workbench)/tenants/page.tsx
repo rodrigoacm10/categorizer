@@ -44,7 +44,7 @@ export default function TenantsPage() {
             </span>
             <span className="text-zinc-400 font-mono text-[11px]">//</span>
             <span className="text-[11px] font-mono text-zinc-600 uppercase tracking-wider">
-              MULTI-TENANT SELECTOR
+              SELEÇÃO DE ALMOXARIFADO
             </span>
           </div>
         </div>
@@ -90,7 +90,7 @@ export default function TenantsPage() {
       {/* Rodapé Industrial */}
       <footer className="h-10 border-t border-zinc-200 bg-white px-6 flex items-center justify-between text-[11px] text-zinc-500 font-mono">
         <span>BANCADA OPERACIONAL DE ALMOXARIFADO</span>
-        <span>X-TENANT-ID ISOLATION • NEXT.JS 14</span>
+        <span>GESTÃO DE UNIDADES E ESTOQUE</span>
       </footer>
     </div>
   );

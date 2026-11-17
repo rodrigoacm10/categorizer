@@ -23,7 +23,7 @@ export interface TenantContextValue {
 const TenantContext = createContext<TenantContextValue | undefined>(undefined);
 
 export interface TenantProviderProps {
-  children: ReactNode;
+  children?: ReactNode;
   initialTenantId?: string | null;
   initialRole?: TenantRole | null;
 }
