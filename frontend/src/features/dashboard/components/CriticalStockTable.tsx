@@ -116,7 +116,6 @@ export const CriticalStockTable: React.FC<CriticalStockTableProps> = ({
         <Table dense>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-24">Código</TableHead>
               <TableHead>Produto</TableHead>
               <TableHead className="w-16 text-center">Unidade</TableHead>
               <TableHead numeric className="w-28 text-right">
@@ -135,9 +134,6 @@ export const CriticalStockTable: React.FC<CriticalStockTableProps> = ({
               // Skeletons de Alta Densidade
               [1, 2, 3].map((i) => (
                 <TableRow key={i} interactive={false}>
-                  <TableCell>
-                    <div className="h-4 w-16 bg-zinc-200/80 rounded animate-pulse" />
-                  </TableCell>
                   <TableCell>
                     <div className="h-4 w-44 bg-zinc-200/80 rounded animate-pulse" />
                   </TableCell>
@@ -160,7 +156,7 @@ export const CriticalStockTable: React.FC<CriticalStockTableProps> = ({
               ))
             ) : items.length === 0 ? (
               <TableEmpty
-                colSpan={7}
+                colSpan={6}
                 message="Nenhum item com estoque crítico"
                 description="Todos os saldos físicos estão rigorosamente em conformidade com o estoque mínimo cadastrado."
               />
@@ -183,19 +179,12 @@ export const CriticalStockTable: React.FC<CriticalStockTableProps> = ({
                     ? String(product.min_stock)
                     : "-";
 
-                const code = product.id.slice(0, 8).toUpperCase();
-
                 return (
                   <TableRow
                     key={product.id}
                     data-testid={`critical-product-row-${product.id}`}
                     className={isZeroStock ? "bg-rose-50/20" : undefined}
                   >
-                    {/* Código */}
-                    <TableCell className="font-mono text-xs font-semibold text-zinc-600">
-                      {code}
-                    </TableCell>
-
                     {/* Produto e Categorias */}
                     <TableCell>
                       <div className="flex flex-col">

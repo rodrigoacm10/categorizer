@@ -2,21 +2,32 @@
 
 import React from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import {
   Warehouse,
   Boxes,
   History,
   ArrowRight,
-  ShieldAlert,
 } from "lucide-react";
 import { KPIStrip } from "@/features/dashboard/components/KPIStrip";
 import { QuickActionToolbar } from "@/features/dashboard/components/QuickActionToolbar";
 import { CriticalStockTable } from "@/features/dashboard/components/CriticalStockTable";
 import { useTenant } from "@/features/tenants/hooks/useTenant";
+import { tenantsApi } from "@/features/tenants/services/tenants.api";
+import { queryKeys } from "@/shared/lib/query-client";
 import { RoleBadge } from "@/shared/components/Badge";
 
 export default function DashboardPage() {
   const { tenantId, role } = useTenant();
+
+  const { data: tenants = [] } = useQuery({
+    queryKey: queryKeys.tenants.list,
+    queryFn: () => tenantsApi.listTenants(),
+    enabled: Boolean(tenantId),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const activeTenant = tenants.find((t) => t.id === tenantId);
 
   return (
     <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 space-y-6">
@@ -33,8 +44,14 @@ export default function DashboardPage() {
               </h1>
               {role && <RoleBadge role={role} size="sm" showDot={true} />}
             </div>
-            <p className="text-xs text-zinc-500 font-mono">
-              Unidade ativa: <span className="font-semibold text-zinc-800">{tenantId || "Carregando..."}</span>
+            <p className="text-xs text-zinc-500">
+              {activeTenant ? (
+                <>
+                  Unidade ativa: <span className="font-semibold text-zinc-800">{activeTenant.name}</span>
+                </>
+              ) : (
+                "Visão consolidada de indicadores, alertas de reposição e movimentações do almoxarifado."
+              )}
             </p>
           </div>
         </div>

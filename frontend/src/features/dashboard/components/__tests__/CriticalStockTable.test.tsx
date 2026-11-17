@@ -81,12 +81,10 @@ describe("CriticalStockTable (FT-10)", () => {
     expect(screen.getByTestId("critical-items-count").textContent).toContain("2 itens críticos");
 
     // Produto 1: Zerado
-    expect(screen.getByText("PROD-111")).toBeDefined();
     expect(screen.getByText("Parafuso Sextavado Aço Inox M10")).toBeDefined();
     expect(screen.getByText("Zerado")).toBeDefined();
 
     // Produto 2: Estoque Baixo
-    expect(screen.getByText("PROD-444")).toBeDefined();
     expect(screen.getByText("Óleo Lubrificante Sintético ISO VG 68")).toBeDefined();
     expect(screen.getByText("Estoque Baixo")).toBeDefined();
 
