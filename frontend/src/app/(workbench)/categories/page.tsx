@@ -130,10 +130,6 @@ export default function CategoriesPage() {
             <h1 className="text-base font-semibold text-zinc-950 tracking-tight">
               Gestão de Categorias
             </h1>
-            <span className="text-zinc-300 font-mono text-xs">//</span>
-            <span className="text-xs font-mono text-zinc-500 uppercase tracking-wider">
-              {tenantId || "ALMOXARIFADO"}
-            </span>
           </div>
           <p className="text-xs text-zinc-500">
             Categorização N:N e agrupamento de produtos para organização, filtros e inventário.
