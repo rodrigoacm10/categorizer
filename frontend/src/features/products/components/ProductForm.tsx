@@ -73,7 +73,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
-  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+  const [createdCategories, setCreatedCategories] = useState<Category[]>([]);
 
   const descriptionId = useId();
 
@@ -99,6 +99,19 @@ export const ProductForm: React.FC<ProductFormProps> = ({
     enabled: !!tenantId,
   });
 
+  // Combina categorias do tenant com categorias criadas inline ou do initialData
+  const allCategories = React.useMemo(() => {
+    const map = new Map<string, Category>();
+    availableCategories.forEach((c) => map.set(c.id, c));
+    (initialData?.categories || []).forEach((c) => {
+      if (!map.has(c.id)) map.set(c.id, c);
+    });
+    createdCategories.forEach((c) => {
+      if (!map.has(c.id)) map.set(c.id, c);
+    });
+    return Array.from(map.values());
+  }, [availableCategories, initialData?.categories, createdCategories]);
+
   const toggleCategory = (categoryId: string) => {
     if (readOnly) return;
     setSelectedCategoryIds((prev) =>
@@ -111,6 +124,14 @@ export const ProductForm: React.FC<ProductFormProps> = ({
   const removeCategory = (categoryId: string) => {
     if (readOnly) return;
     setSelectedCategoryIds((prev) => prev.filter((id) => id !== categoryId));
+  };
+
+  const handleCategorySelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (readOnly) return;
+    const catId = e.target.value;
+    if (catId && !selectedCategoryIds.includes(catId)) {
+      setSelectedCategoryIds((prev) => [...prev, catId]);
+    }
   };
 
   const handleUnitChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -226,12 +247,13 @@ export const ProductForm: React.FC<ProductFormProps> = ({
   };
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="space-y-6 max-w-4xl font-sans"
-      data-testid="product-form"
-      noValidate
-    >
+    <>
+      <form
+        onSubmit={handleSubmit}
+        className="space-y-6 max-w-4xl font-sans"
+        data-testid="product-form"
+        noValidate
+      >
       {/* Banner Obrigatório de Alerta Contábil (FT-13): Saldo inicial é ZERO */}
       {mode === "create" && (
         <div
@@ -442,46 +464,95 @@ export const ProductForm: React.FC<ProductFormProps> = ({
             )}
           </div>
 
-          <div className="space-y-3" data-testid="product-categories-selector">
+          <div className="space-y-4" data-testid="product-categories-selector">
+            {/* Seletor Dropdown de Categorias */}
+            {!readOnly && (
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="product-category-select"
+                  className="block text-xs font-semibold text-zinc-700 tracking-wide"
+                >
+                  Selecionar Categoria para Associar
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    id="product-category-select"
+                    aria-label="Selecionar categoria para associar"
+                    value=""
+                    disabled={readOnly || isLoadingCategories}
+                    onChange={handleCategorySelectChange}
+                    className={cn(
+                      "flex-1 rounded border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-900 transition-colors cursor-pointer",
+                      "focus:outline-none focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950",
+                      "disabled:bg-zinc-50 disabled:text-zinc-400 disabled:border-zinc-200 disabled:cursor-not-allowed"
+                    )}
+                    data-testid="product-category-select"
+                  >
+                    <option value="">
+                      {isLoadingCategories
+                        ? "Carregando categorias..."
+                        : allCategories.length === 0
+                        ? "Nenhuma categoria cadastrada no almoxarifado"
+                        : allCategories.every((cat) => selectedCategoryIds.includes(cat.id))
+                        ? "Todas as categorias disponíveis já foram associadas"
+                        : "Selecione uma categoria para associar..."}
+                    </option>
+                    {allCategories
+                      .filter((cat) => !selectedCategoryIds.includes(cat.id))
+                      .map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          + {cat.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
             {/* Categorias Atualmente Selecionadas */}
-            <div className="min-h-[38px] p-2 rounded border border-zinc-200 bg-zinc-50/50 flex flex-wrap items-center gap-1.5">
-              {selectedCategoryIds.length === 0 ? (
-                <span className="text-xs text-zinc-400 italic">
-                  Nenhuma categoria vinculada a este produto.
-                </span>
-              ) : (
-                selectedCategoryIds.map((id) => {
-                  const cat = availableCategories.find((c) => c.id === id);
-                  if (!cat) return null;
-                  return (
-                    <div key={cat.id} className="inline-flex items-center gap-1">
-                      <CategoryBadge category={cat} size="sm" />
-                      {!readOnly && (
-                        <button
-                          type="button"
-                          onClick={() => removeCategory(cat.id)}
-                          className="text-zinc-400 hover:text-rose-600 p-0.5 rounded focus:outline-none"
-                          title={`Remover categoria ${cat.name}`}
-                          aria-label={`Remover categoria ${cat.name}`}
-                          data-testid={`remove-category-${cat.id}`}
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })
-              )}
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">
+                Categorias Vinculadas ({selectedCategoryIds.length}):
+              </span>
+              <div className="min-h-[38px] p-2 rounded border border-zinc-200 bg-zinc-50/50 flex flex-wrap items-center gap-1.5">
+                {selectedCategoryIds.length === 0 ? (
+                  <span className="text-xs text-zinc-400 italic">
+                    Nenhuma categoria vinculada a este produto.
+                  </span>
+                ) : (
+                  selectedCategoryIds.map((id) => {
+                    const cat = allCategories.find((c) => c.id === id);
+                    if (!cat) return null;
+                    return (
+                      <div key={cat.id} className="inline-flex items-center gap-1">
+                        <CategoryBadge category={cat} size="sm" />
+                        {!readOnly && (
+                          <button
+                            type="button"
+                            onClick={() => removeCategory(cat.id)}
+                            className="text-zinc-400 hover:text-rose-600 p-0.5 rounded focus:outline-none"
+                            title={`Remover categoria ${cat.name}`}
+                            aria-label={`Remover categoria ${cat.name}`}
+                            data-testid={`remove-category-${cat.id}`}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
 
             {/* Lista Rápida de Categorias para Seleção */}
-            {!readOnly && availableCategories.length > 0 && (
+            {!readOnly && allCategories.length > 0 && (
               <div className="space-y-1.5">
                 <span className="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">
-                  Clique para associar ou desassociar:
+                  Ou clique para associar ou desassociar rapidamente:
                 </span>
                 <div className="flex flex-wrap gap-1.5">
-                  {availableCategories.map((cat) => {
+                  {allCategories.map((cat) => {
                     const isSelected = selectedCategoryIds.includes(cat.id);
                     return (
                       <button
@@ -538,23 +609,34 @@ export const ProductForm: React.FC<ProductFormProps> = ({
           </div>
         )}
       </div>
-
-      {/* Modal Inline para Criação Rápida de Nova Categoria */}
-      <CategoryModal
-        isOpen={isCategoryModalOpen}
-        onClose={() => setIsCategoryModalOpen(false)}
-        onSuccess={(newCat) => {
-          setSelectedCategoryIds((prev) =>
-            prev.includes(newCat.id) ? prev : [...prev, newCat.id]
-          );
-          if (tenantId) {
-            queryClient.invalidateQueries({
-              queryKey: queryKeys.categories.list(tenantId),
-            });
-          }
-        }}
-      />
     </form>
+
+    {/* Modal Inline para Criação Rápida de Nova Categoria (renderizado fora do form para evitar nested forms no DOM) */}
+    <CategoryModal
+      isOpen={isCategoryModalOpen}
+      onClose={() => setIsCategoryModalOpen(false)}
+      onSuccess={(newCat) => {
+        // Registra a categoria no estado local imediatamente para renderização síncrona
+        setCreatedCategories((prev) => [...prev, newCat]);
+        setSelectedCategoryIds((prev) =>
+          prev.includes(newCat.id) ? prev : [...prev, newCat.id]
+        );
+        // Atualiza o cache do React Query
+        queryClient.setQueryData<Category[]>(
+          queryKeys.categories.list(tenantId || ""),
+          (old = []) => {
+            const exists = old.some((c) => c.id === newCat.id);
+            return exists ? old : [...old, newCat];
+          }
+        );
+        if (tenantId) {
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.categories.list(tenantId),
+          });
+        }
+      }}
+    />
+  </>
   );
 };
 
