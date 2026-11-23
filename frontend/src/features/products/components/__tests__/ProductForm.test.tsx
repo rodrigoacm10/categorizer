@@ -26,6 +26,8 @@ vi.mock("../../services/products.api", () => ({
 vi.mock("@/features/categories/services/categories.api", () => ({
   categoriesApi: {
     list: vi.fn(),
+    create: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 
@@ -270,5 +272,29 @@ describe("ProductForm (FT-13 / FT-14)", () => {
         screen.getByText("Nome de produto já cadastrado neste almoxarifado.")
       ).toBeDefined();
     });
+  });
+
+  it("permite selecionar categoria através do select dropdown", async () => {
+    vi.mocked(categoriesApi.list).mockResolvedValue(mockCategories);
+
+    renderForm();
+
+    // Aguarda as categorias serem carregadas no select
+    await waitFor(() => {
+      expect(screen.getByRole("option", { name: "+ EPI" })).toBeDefined();
+    });
+
+    const select = screen.getByTestId("product-category-select") as HTMLSelectElement;
+
+    // Seleciona a categoria 'cat-2' (EPI) pelo select
+    fireEvent.change(select, { target: { value: "cat-2" } });
+
+    // A categoria EPI deve aparecer nas categorias vinculadas
+    expect(await screen.findByTestId("category-badge-cat-2")).toBeDefined();
+    expect(screen.getByTestId("remove-category-cat-2")).toBeDefined();
+
+    // Remove a categoria clicando no botão X
+    fireEvent.click(screen.getByTestId("remove-category-cat-2"));
+    expect(screen.queryByTestId("category-badge-cat-2")).toBeNull();
   });
 });
