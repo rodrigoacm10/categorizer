@@ -297,4 +297,47 @@ describe("ProductForm (FT-13 / FT-14)", () => {
     fireEvent.click(screen.getByTestId("remove-category-cat-2"));
     expect(screen.queryByTestId("category-badge-cat-2")).toBeNull();
   });
+
+  it("abre modal inline para criar nova categoria, cadastra com sucesso e associa ao produto sem submeter o formulário pai", async () => {
+    vi.mocked(categoriesApi.list).mockResolvedValue(mockCategories);
+    const newCategory: Category = {
+      id: "cat-999",
+      name: "Químicos Perigosos",
+      color: "#DC2626",
+      created_at: "2026-11-18T10:00:00Z",
+    };
+    vi.mocked(categoriesApi.create).mockResolvedValueOnce(newCategory);
+
+    renderForm();
+
+    // Abre o modal de nova categoria
+    const openModalBtn = screen.getByTestId("open-inline-category-modal");
+    fireEvent.click(openModalBtn);
+
+    // Modal deve estar visível
+    expect(screen.getByRole("dialog")).toBeDefined();
+    expect(screen.getByTestId("category-modal-submit-button")).toBeDefined();
+
+    // Preenche o nome da nova categoria no modal
+    const nameInput = screen.getByLabelText(/Nome da Categoria/i);
+    fireEvent.change(nameInput, { target: { value: "Químicos Perigosos" } });
+
+    // Clica no botão Salvar Categoria dentro do modal
+    const saveCategoryBtn = screen.getByTestId("category-modal-submit-button");
+    fireEvent.click(saveCategoryBtn);
+
+    await waitFor(() => {
+      expect(categoriesApi.create).toHaveBeenCalledWith({
+        name: "Químicos Perigosos",
+        description: undefined,
+        color: "#2563EB",
+      });
+    });
+
+    // O formulário de produto NÃO deve ter sido submetido (productsApi.create não chamado)
+    expect(productsApi.create).not.toHaveBeenCalled();
+
+    // A nova categoria deve estar vinculada e renderizada como badge
+    expect(await screen.findByTestId("category-badge-cat-999")).toBeDefined();
+  });
 });
