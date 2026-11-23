@@ -75,6 +75,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     const trimmedName = name.trim();
     if (!trimmedName) {
       setError("O nome da categoria é obrigatório.");
@@ -145,7 +146,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
         </div>
 
         {/* Corpo do Formulário */}
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 space-y-4" onClick={(e) => e.stopPropagation()}>
           {error && (
             <div
               role="alert"
@@ -267,7 +268,10 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
               type="button"
               variant="outline"
               size="sm"
-              onClick={onClose}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+              }}
               disabled={isLoading}
             >
               Cancelar
@@ -277,6 +281,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
               variant="solid"
               size="sm"
               isLoading={isLoading}
+              onClick={(e) => e.stopPropagation()}
               data-testid="category-modal-submit-button"
             >
               Salvar Categoria
